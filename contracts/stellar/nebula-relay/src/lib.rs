@@ -6,8 +6,12 @@ use soroban_sdk::{
 
 #[cfg(test)]
 mod test;
+mod verifier_router;
+
+use verifier_router::RiscZeroVerifierRouterClient;
 
 const JOURNAL_LEN: u32 = 289;
+#[cfg(feature = "dev-mock-verifier")]
 const DEV_SEAL_PREFIX: &[u8; 18] = b"NEBULA_DEV_SEAL_V1";
 const DEMO_DESTINATION_CHAIN_ID: u64 = 1_501;
 
@@ -32,6 +36,7 @@ pub enum Error {
     NullifierAlreadyClaimed = 15,
     PoolAdapterFailed = 16,
     WrongDestination = 17,
+    VerifierRouterFailed = 18,
 }
 
 #[contracttype]
@@ -100,6 +105,7 @@ enum DataKey {
     Asset,
     NetworkDomain,
     Paused,
+    DevMockVerifierEnabled,
     Source(u64, BytesN<20>, BytesN<20>),
     ComplianceRoot(BytesN<32>, u32),
     Claimed(BytesN<32>),
@@ -139,6 +145,10 @@ impl NebulaRelay {
             .instance()
             .set(&DataKey::NetworkDomain, &network_domain);
         env.storage().instance().set(&DataKey::Paused, &false);
+        #[cfg(feature = "dev-mock-verifier")]
+        env.storage()
+            .instance()
+            .set(&DataKey::DevMockVerifierEnabled, &false);
         Ok(())
     }
 
@@ -199,7 +209,7 @@ impl NebulaRelay {
             return Err(Error::Paused);
         }
 
-        verify_mock(&env, &seal, &image_id, &journal)?;
+        verify_proof(&env, &seal, &image_id, &journal)?;
         let decoded = decode_journal(&env, &journal)?;
         validate_journal(&env, &decoded)?;
 
@@ -267,6 +277,15 @@ impl NebulaRelay {
         env.storage().instance().set(&DataKey::Paused, &false);
         Ok(())
     }
+
+    #[cfg(feature = "dev-mock-verifier")]
+    pub fn set_dev_mock_verifier(env: Env, admin: Address, enabled: bool) -> Result<(), Error> {
+        require_admin(&env, &admin)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::DevMockVerifierEnabled, &enabled);
+        Ok(())
+    }
 }
 
 fn require_admin(env: &Env, provided: &Address) -> Result<(), Error> {
@@ -289,7 +308,7 @@ fn is_paused(env: &Env) -> Result<bool, Error> {
         .ok_or(Error::NotInitialized)
 }
 
-fn verify_mock(
+fn verify_proof(
     env: &Env,
     seal: &Bytes,
     image_id: &BytesN<32>,
@@ -304,7 +323,32 @@ fn verify_mock(
         return Err(Error::InvalidImageId);
     }
 
-    let digest: BytesN<32> = env.crypto().sha256(journal).into();
+    let journal_digest: BytesN<32> = env.crypto().sha256(journal).into();
+
+    #[cfg(feature = "dev-mock-verifier")]
+    {
+        let dev_enabled = env
+            .storage()
+            .instance()
+            .get(&DataKey::DevMockVerifierEnabled)
+            .unwrap_or(false);
+        if dev_enabled {
+            return verify_dev_mock(env, seal, &journal_digest);
+        }
+    }
+
+    let router_address: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::VerifierRouter)
+        .ok_or(Error::NotInitialized)?;
+    let router = RiscZeroVerifierRouterClient::new(env, &router_address);
+    router.verify(seal, image_id, &journal_digest);
+    Ok(())
+}
+
+#[cfg(feature = "dev-mock-verifier")]
+fn verify_dev_mock(env: &Env, seal: &Bytes, journal_digest: &BytesN<32>) -> Result<(), Error> {
     let prefix_len = DEV_SEAL_PREFIX.len() as u32;
     if seal.len() != prefix_len + 32 {
         return Err(Error::InvalidProof);
@@ -317,7 +361,7 @@ fn verify_mock(
         .slice(prefix_len..prefix_len + 32)
         .try_into()
         .map_err(|_| Error::InvalidProof)?;
-    if seal_digest != digest {
+    if seal_digest != *journal_digest {
         return Err(Error::InvalidProof);
     }
     Ok(())

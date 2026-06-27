@@ -16,7 +16,7 @@ Cross-chain funding can expose source wallet, destination wallet, amount, timing
 
 ## What ZK Proves
 
-The planned RISC Zero proof shows that a source-chain lock witness is valid for an approved escrow and token, satisfies amount and compliance policy, derives the public note commitment and claim nullifier correctly, and does not publicly reveal the sender address or final Stellar recipient.
+The RISC Zero proof statement is represented by the Stage 4 guest POC. It validates a structured source-chain lock witness for an approved escrow and token, amount bounds, compliance policy, destination, note commitment, and nullifier derivation. The current local artifact is dev-mode only; production Groth16 proof generation is not yet wired into the demo.
 
 ## What Runs On Stellar
 
@@ -26,30 +26,34 @@ The core state transition is the Stellar `NebulaRelay` Soroban contract. It must
 
 Original Nebula work will include the EVM escrow, proof journal schema, witness/proof artifact adapters, Soroban claim contract, pool adapter layer, auditor packet, and product UX.
 
-Reference or vendored code is tracked in [docs/reused-code.md](docs/reused-code.md). Stage 0 does not integrate those upstream projects yet.
+Reference or vendored code is tracked in [docs/reused-code.md](docs/reused-code.md). Nebula now includes a Protocol 26-compatible adapter shim for Nethermind's Stellar RISC Zero verifier router ABI, while the vendored verifier contracts remain unmodified.
 
 ## Mocked Or Relayed In The MVP
 
-Stage 0 is repository setup only. The planned MVP may use deterministic fixtures, RISC Zero dev mode, a mock verifier for local Stellar contract tests, admin-relayed receipt roots, mock tokens, and unaudited reference code. Any such path must remain explicitly documented before demo or submission.
+The current local demo uses deterministic fixtures and a dev-mode proof artifact. `NebulaRelay` now defaults to calling a verifier router-compatible `verify(seal, image_id, journal_digest)` path, but local tests use an upstream-compatible router harness rather than a deployed Groth16 verifier. The old dev mock verifier remains available only with the explicit `dev-mock-verifier` feature and admin toggle.
 
 ## Exact Demo Commands
 
-No end-to-end demo exists at Stage 0. The current setup command is:
+Install dependencies:
 
 ```bash
 pnpm install
 ```
 
-Planned validation commands are:
+Current local validation commands:
 
 ```bash
-pnpm lint
-pnpm typecheck
 pnpm test
-pnpm build
 forge test
 cargo test --workspace
+cargo test -p nebula-relay-contract --features dev-mock-verifier
 stellar contract build
+```
+
+Generate the current dev proof artifact:
+
+```bash
+cargo run -p nebula-host -- prove --fixture fixtures/valid-lock.json --mode dev --out artifacts/dev-proof.json
 ```
 
 ## Testnet Contract IDs And Source Escrow
@@ -65,7 +69,7 @@ No contracts are deployed yet.
 
 ## Security Limitations
 
-This repository is not audited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP will not be production privacy infrastructure. Authorized disclosure is part of the design. ASP roots, denylist or non-membership checks, governance, legal review, regulatory review, and security review are required before production deployment.
+This repository is not audited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. The current local proof artifact is dev-mode, and real Groth16 verification requires a matching RISC Zero proof plus a deployed Nethermind verifier router. Authorized disclosure is part of the design. ASP roots, denylist or non-membership checks, governance, legal review, regulatory review, and security review are required before production deployment.
 
 ## Production Path
 

@@ -7,6 +7,10 @@ license.workspace = true
 [lib]
 crate-type = ["lib", "cdylib"]
 
+[features]
+default = []
+dev-mock-verifier = []
+
 [dependencies]
 soroban-sdk.workspace = true
 
@@ -14,4 +18,3 @@ soroban-sdk.workspace = true
 hex.workspace = true
 nebula-risc0-shared = { path = "../../../risc0/shared" }
 soroban-sdk = { workspace = true, features = ["testutils"] }
-
