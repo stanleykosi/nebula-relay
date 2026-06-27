@@ -1,5 +1,5 @@
 {
-  "name": "@nebula/core",
+  "name": "@nebula/evm-client",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,8 @@
     "test": "vitest run src"
   },
   "dependencies": {
-    "zod": "4.2.1"
+    "@nebula/core": "workspace:*",
+    "viem": "^2.53.1"
   },
   "devDependencies": {
     "vitest": "4.0.16"
