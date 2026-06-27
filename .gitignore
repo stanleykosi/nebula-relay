@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Builds
+.next/
+dist/
+build/
+target/
+out/
+cache/
+
+# Docs / planning pack
+docs/
+source-context/
+templates/
+/*.md
+!/README.md
+
+# Env/secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Proof artifacts / private witnesses
+artifacts/private/
+artifacts/**/*.secret.json
+fixtures/**/*.secret.json
+.nebula/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Foundry
+contracts/evm/cache/
+contracts/evm/out/
+contracts/evm/broadcast/
+
+# Logs
+*.log
