@@ -4,10 +4,12 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env,
 };
 
+mod pool_adapter;
 #[cfg(test)]
 mod test;
 mod verifier_router;
 
+use pool_adapter::NebulaPoolAdapterClient;
 use verifier_router::RiscZeroVerifierRouterClient;
 
 const JOURNAL_LEN: u32 = 289;
@@ -202,7 +204,7 @@ impl NebulaRelay {
         seal: Bytes,
         image_id: BytesN<32>,
         journal: Bytes,
-        _pool_payload: Bytes,
+        pool_payload: Bytes,
     ) -> Result<ClaimReceipt, Error> {
         claimant.require_auth();
         if is_paused(&env)? {
@@ -216,6 +218,8 @@ impl NebulaRelay {
         if Self::is_claimed(env.clone(), decoded.claim_nullifier.clone()) {
             return Err(Error::NullifierAlreadyClaimed);
         }
+
+        handoff_private_note(&env, &claimant, &decoded, &pool_payload)?;
 
         let record = ClaimRecord {
             claimant,
@@ -253,6 +257,12 @@ impl NebulaRelay {
 
     pub fn get_claim(env: Env, nullifier: BytesN<32>) -> Option<ClaimRecord> {
         env.storage().persistent().get(&DataKey::Claim(nullifier))
+    }
+
+    pub fn get_note(env: Env, note_commitment: BytesN<32>) -> Option<ClaimRecord> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Note(note_commitment))
     }
 
     pub fn get_source(
@@ -414,6 +424,40 @@ fn validate_journal(env: &Env, journal: &NebulaJournalV1) -> Result<(), Error> {
     if journal.expires_at_ledger < env.ledger().sequence() {
         return Err(Error::ReceiptRootExpired);
     }
+    Ok(())
+}
+
+fn handoff_private_note(
+    env: &Env,
+    claimant: &Address,
+    journal: &NebulaJournalV1,
+    pool_payload: &Bytes,
+) -> Result<(), Error> {
+    let adapter_address: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::PoolAdapter)
+        .ok_or(Error::NotInitialized)?;
+    let asset: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::Asset)
+        .ok_or(Error::NotInitialized)?;
+    let relay = env.current_contract_address();
+    let adapter = NebulaPoolAdapterClient::new(env, &adapter_address);
+    adapter
+        .try_credit_note_from_relay(
+            &relay,
+            claimant,
+            &journal.stellar_note_commitment,
+            &journal.amount,
+            &asset,
+            &journal.claim_nullifier,
+            &journal.event_commitment,
+            pool_payload,
+        )
+        .map_err(|_| Error::PoolAdapterFailed)?
+        .map_err(|_| Error::PoolAdapterFailed)?;
     Ok(())
 }
 

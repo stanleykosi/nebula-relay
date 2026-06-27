@@ -1,5 +1,6 @@
 extern crate std;
 
+use super::pool_adapter::PoolAdapterError;
 use super::verifier_router::VerifierError;
 use super::*;
 use nebula_risc0_shared::{
@@ -23,6 +24,28 @@ enum RouterHarnessKey {
     LastSeal,
     LastImageId,
     LastJournalDigest,
+}
+
+#[contracttype]
+#[derive(Clone)]
+enum PoolHarnessKey {
+    ExpectedRelay,
+    ExpectedClaimant,
+    ExpectedNote,
+    ExpectedAmount,
+    ExpectedAsset,
+    ExpectedNullifier,
+    ExpectedEvent,
+    ShouldFail,
+    Called,
+    LastRelay,
+    LastClaimant,
+    LastNote,
+    LastAmount,
+    LastAsset,
+    LastNullifier,
+    LastEvent,
+    LastPayload,
 }
 
 #[contract]
@@ -114,6 +137,176 @@ impl RouterHarness {
     }
 }
 
+#[contract]
+struct PoolAdapterHarness;
+
+#[contractimpl]
+impl PoolAdapterHarness {
+    pub fn configure(
+        env: Env,
+        expected_relay: Address,
+        expected_claimant: Address,
+        expected_note: BytesN<32>,
+        expected_amount: i128,
+        expected_asset: Address,
+        expected_nullifier: BytesN<32>,
+        expected_event: BytesN<32>,
+        should_fail: bool,
+    ) {
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::ExpectedRelay, &expected_relay);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::ExpectedClaimant, &expected_claimant);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::ExpectedNote, &expected_note);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::ExpectedAmount, &expected_amount);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::ExpectedAsset, &expected_asset);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::ExpectedNullifier, &expected_nullifier);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::ExpectedEvent, &expected_event);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::ShouldFail, &should_fail);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::Called, &false);
+    }
+
+    pub fn credit_note_from_relay(
+        env: Env,
+        relay: Address,
+        claimant: Address,
+        note_commitment: BytesN<32>,
+        amount: i128,
+        asset: Address,
+        nullifier: BytesN<32>,
+        event_commitment: BytesN<32>,
+        pool_payload: Bytes,
+    ) -> Result<(), PoolAdapterError> {
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::Called, &true);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::LastRelay, &relay);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::LastClaimant, &claimant);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::LastNote, &note_commitment);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::LastAmount, &amount);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::LastAsset, &asset);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::LastNullifier, &nullifier);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::LastEvent, &event_commitment);
+        env.storage()
+            .temporary()
+            .set(&PoolHarnessKey::LastPayload, &pool_payload);
+
+        if env
+            .storage()
+            .temporary()
+            .get(&PoolHarnessKey::ShouldFail)
+            .unwrap_or(false)
+        {
+            return Err(PoolAdapterError::Rejected);
+        }
+
+        let expected_relay: Address = env
+            .storage()
+            .temporary()
+            .get(&PoolHarnessKey::ExpectedRelay)
+            .ok_or(PoolAdapterError::InvalidHandoff)?;
+        if relay != expected_relay {
+            return Err(PoolAdapterError::NotRelay);
+        }
+
+        let expected_claimant: Address = env
+            .storage()
+            .temporary()
+            .get(&PoolHarnessKey::ExpectedClaimant)
+            .ok_or(PoolAdapterError::InvalidHandoff)?;
+        let expected_note: BytesN<32> = env
+            .storage()
+            .temporary()
+            .get(&PoolHarnessKey::ExpectedNote)
+            .ok_or(PoolAdapterError::InvalidHandoff)?;
+        let expected_amount: i128 = env
+            .storage()
+            .temporary()
+            .get(&PoolHarnessKey::ExpectedAmount)
+            .ok_or(PoolAdapterError::InvalidHandoff)?;
+        let expected_asset: Address = env
+            .storage()
+            .temporary()
+            .get(&PoolHarnessKey::ExpectedAsset)
+            .ok_or(PoolAdapterError::InvalidHandoff)?;
+        let expected_nullifier: BytesN<32> = env
+            .storage()
+            .temporary()
+            .get(&PoolHarnessKey::ExpectedNullifier)
+            .ok_or(PoolAdapterError::InvalidHandoff)?;
+        let expected_event: BytesN<32> = env
+            .storage()
+            .temporary()
+            .get(&PoolHarnessKey::ExpectedEvent)
+            .ok_or(PoolAdapterError::InvalidHandoff)?;
+
+        if claimant != expected_claimant
+            || note_commitment != expected_note
+            || amount != expected_amount
+            || asset != expected_asset
+            || nullifier != expected_nullifier
+            || event_commitment != expected_event
+        {
+            return Err(PoolAdapterError::InvalidHandoff);
+        }
+
+        Ok(())
+    }
+
+    pub fn was_called(env: Env) -> bool {
+        env.storage()
+            .temporary()
+            .get(&PoolHarnessKey::Called)
+            .unwrap_or(false)
+    }
+
+    pub fn last_note(env: Env) -> Option<BytesN<32>> {
+        env.storage().temporary().get(&PoolHarnessKey::LastNote)
+    }
+
+    pub fn last_amount(env: Env) -> Option<i128> {
+        env.storage().temporary().get(&PoolHarnessKey::LastAmount)
+    }
+
+    pub fn last_asset(env: Env) -> Option<Address> {
+        env.storage().temporary().get(&PoolHarnessKey::LastAsset)
+    }
+
+    pub fn last_payload(env: Env) -> Option<Bytes> {
+        env.storage().temporary().get(&PoolHarnessKey::LastPayload)
+    }
+}
+
 fn hex20(env: &Env, value: &str) -> BytesN<20> {
     let raw = value.trim_start_matches("0x");
     let bytes = hex::decode(raw).unwrap();
@@ -139,6 +332,8 @@ struct Setup {
     env: Env,
     contract_id: Address,
     verifier_router: Address,
+    pool_adapter: Address,
+    asset: Address,
     admin: Address,
     claimant: Address,
 }
@@ -150,6 +345,10 @@ impl Setup {
 
     fn router(&self) -> RouterHarnessClient<'_> {
         RouterHarnessClient::new(&self.env, &self.verifier_router)
+    }
+
+    fn adapter(&self) -> PoolAdapterHarnessClient<'_> {
+        PoolAdapterHarnessClient::new(&self.env, &self.pool_adapter)
     }
 
     fn configure_router(
@@ -175,6 +374,36 @@ impl Setup {
         self.router()
             .configure(seal, image_id, expected_journal_digest, &should_fail);
     }
+
+    fn configure_adapter_from_journal(&self, journal: &NebulaJournal, should_fail: bool) {
+        let fields = handoff_fields(&self.env, journal);
+        self.adapter().configure(
+            &self.contract_id,
+            &self.claimant,
+            &fields.note_commitment,
+            &fields.amount,
+            &self.asset,
+            &fields.nullifier,
+            &fields.event_commitment,
+            &should_fail,
+        );
+    }
+}
+
+struct HandoffFields {
+    note_commitment: BytesN<32>,
+    amount: i128,
+    nullifier: BytesN<32>,
+    event_commitment: BytesN<32>,
+}
+
+fn handoff_fields(env: &Env, journal: &NebulaJournal) -> HandoffFields {
+    HandoffFields {
+        note_commitment: hex32(env, &journal.stellar_note_commitment),
+        amount: journal.amount.parse::<i128>().unwrap(),
+        nullifier: hex32(env, &journal.claim_nullifier),
+        event_commitment: hex32(env, &journal.event_commitment),
+    }
 }
 
 fn setup() -> Setup {
@@ -186,19 +415,19 @@ fn setup() -> Setup {
     let router = RouterHarnessClient::new(&env, &verifier_router);
     let digest: BytesN<32> = env.crypto().sha256(&journal).into();
     router.configure(&seal, &image_id, &digest, &false);
+    let pool_adapter = env.register(PoolAdapterHarness, ());
 
     let contract_id = env.register(NebulaRelay, ());
     let client = NebulaRelayClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
     let claimant = Address::generate(&env);
-    let adapter = Address::generate(&env);
     let asset = Address::generate(&env);
     let witness = load_witness(fixture("valid-lock.json")).unwrap();
 
     client.initialize(
         &admin,
         &verifier_router,
-        &adapter,
+        &pool_adapter,
         &BytesN::from_array(&env, &DEV_IMAGE_ID),
         &asset,
         &hex32(&env, &witness.expected.network_domain),
@@ -220,13 +449,17 @@ fn setup() -> Setup {
         &true,
     );
 
-    Setup {
+    let setup = Setup {
         env,
         contract_id,
         verifier_router,
+        pool_adapter,
+        asset,
         admin,
         claimant,
-    }
+    };
+    setup.configure_adapter_from_journal(&valid_journal(), false);
+    setup
 }
 
 fn artifact_parts(env: &Env, fixture: &str) -> (Bytes, BytesN<32>, Bytes, BytesN<32>) {
@@ -275,7 +508,71 @@ fn valid_claim_stores_nullifier_and_record() {
     assert!(client.is_claimed(&nullifier));
     let record = client.get_claim(&nullifier).unwrap();
     assert_eq!(record.amount, 100_000_000);
+    let note_record = client.get_note(&receipt.note_commitment).unwrap();
+    assert_eq!(note_record, record);
     assert_eq!(s.router().last_journal_digest(), Some(expected_digest));
+}
+
+#[test]
+fn claim_hands_off_private_note_to_adapter() {
+    let s = setup();
+    let client = s.client();
+    let (seal, image_id, journal, _) = artifact_parts(&s.env, &fixture("valid-lock.json"));
+    let payload = Bytes::from_slice(&s.env, b"mode-a-private-payments-handoff-v1");
+    s.configure_router(&seal, &image_id, &journal, false);
+    s.configure_adapter_from_journal(&valid_journal(), false);
+
+    let receipt = client.claim(&s.claimant, &seal, &image_id, &journal, &payload);
+
+    assert!(s.adapter().was_called());
+    assert_eq!(
+        s.adapter().last_note(),
+        Some(receipt.note_commitment.clone())
+    );
+    assert_eq!(s.adapter().last_amount(), Some(receipt.amount));
+    assert_eq!(s.adapter().last_asset(), Some(s.asset.clone()));
+    assert_eq!(s.adapter().last_payload(), Some(payload));
+}
+
+#[test]
+fn adapter_rejects_non_relay_handoff() {
+    let s = setup();
+    let journal = valid_journal();
+    let fields = handoff_fields(&s.env, &journal);
+    let wrong_relay = Address::generate(&s.env);
+    let payload = Bytes::from_slice(&s.env, b"direct-non-relay-call");
+
+    assert!(s
+        .adapter()
+        .try_credit_note_from_relay(
+            &wrong_relay,
+            &s.claimant,
+            &fields.note_commitment,
+            &fields.amount,
+            &s.asset,
+            &fields.nullifier,
+            &fields.event_commitment,
+            &payload,
+        )
+        .is_err());
+}
+
+#[test]
+fn adapter_failure_rolls_back_nullifier_storage() {
+    let s = setup();
+    let client = s.client();
+    let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
+    let model = valid_journal();
+    let fields = handoff_fields(&s.env, &model);
+    s.configure_router(&seal, &image_id, &journal, false);
+    s.configure_adapter_from_journal(&model, true);
+
+    assert!(client
+        .try_claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env),)
+        .is_err());
+    assert!(!client.is_claimed(&nullifier));
+    assert!(client.get_claim(&nullifier).is_none());
+    assert!(client.get_note(&fields.note_commitment).is_none());
 }
 
 #[test]
@@ -467,14 +764,14 @@ fn setup_dev_mock() -> Setup {
     let admin = Address::generate(&env);
     let claimant = Address::generate(&env);
     let verifier_router = Address::generate(&env);
-    let adapter = Address::generate(&env);
+    let pool_adapter = env.register(PoolAdapterHarness, ());
     let asset = Address::generate(&env);
     let witness = load_witness(fixture("valid-lock.json")).unwrap();
 
     client.initialize(
         &admin,
         &verifier_router,
-        &adapter,
+        &pool_adapter,
         &BytesN::from_array(&env, &DEV_IMAGE_ID),
         &asset,
         &hex32(&env, &witness.expected.network_domain),
@@ -497,13 +794,17 @@ fn setup_dev_mock() -> Setup {
         &true,
     );
 
-    Setup {
+    let setup = Setup {
         env,
         contract_id,
         verifier_router,
+        pool_adapter,
+        asset,
         admin,
         claimant,
-    }
+    };
+    setup.configure_adapter_from_journal(&valid_journal(), false);
+    setup
 }
 
 #[cfg(feature = "dev-mock-verifier")]
