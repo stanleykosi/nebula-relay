@@ -40,5 +40,8 @@ contracts/evm/cache/
 contracts/evm/out/
 contracts/evm/broadcast/
 
+# Soroban generated test snapshots
+contracts/stellar/**/test_snapshots/
+
 # Logs
 *.log

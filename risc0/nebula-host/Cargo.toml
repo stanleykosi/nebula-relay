@@ -1,0 +1,24 @@
+[package]
+name = "nebula-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "nebula_host"
+
+[[bin]]
+name = "nebula-host"
+path = "src/main.rs"
+
+[dependencies]
+chrono.workspace = true
+clap.workspace = true
+hex.workspace = true
+nebula-guest = { path = "../nebula-guest" }
+nebula-risc0-shared = { path = "../shared" }
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

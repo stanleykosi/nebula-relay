@@ -1,0 +1,17 @@
+[package]
+name = "nebula-relay-contract"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+soroban-sdk.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+nebula-risc0-shared = { path = "../../../risc0/shared" }
+soroban-sdk = { workspace = true, features = ["testutils"] }
+
