@@ -1,40 +1,67 @@
 # Nebula Relay
 
-Compliance-forward proof-gated relay prototype for private Stellar-side claims, designed around RISC Zero proofs and Stellar smart contracts.
+Compliance-forward proof-gated relay prototype for private Stellar-side claims, built with RISC Zero-style proof artifacts and a Stellar Soroban claim contract.
 
 ## What Nebula Relay Is
 
-Nebula Relay is a hackathon MVP for proving that an approved EVM stablecoin lock happened, then claiming a private-note-compatible Stellar record. The intended production-shaped flow is:
+Nebula Relay is a hackathon MVP that proves an approved EVM stablecoin lock happened, then lets a Stellar contract accept a private-note-compatible claim only after proof verification and policy checks pass.
 
 ```text
-EVM testnet lock -> RISC Zero proof -> Stellar Soroban claim -> private-note-compatible output
+EVM lock event -> LockWitness -> RISC Zero journal/proof artifact -> Stellar NebulaRelay claim -> private-note-compatible handoff
 ```
+
+The current demo is deterministic fixture/dev mode. It is useful for judging the complete vertical slice, but it is not production bridge infrastructure.
 
 ## Why It Matters For Stellar Real-World ZK
 
-Cross-chain funding can expose source wallet, destination wallet, amount, timing, and future transaction graph. Nebula Relay focuses on real-world Stellar use cases: remittances, stablecoins, privacy with compliance controls, and user-authorized disclosure.
+Cross-chain funding can expose a sender wallet, recipient wallet, amount, timing, and future transaction graph. Nebula Relay shows how Stellar can host the load-bearing state transition for a privacy-preserving payment claim while still supporting compliance roots and user-authorized disclosure.
 
 ## What ZK Proves
 
-The RISC Zero proof statement is represented by the Stage 4 guest POC. It validates a structured source-chain lock witness for an approved escrow and token, amount bounds, compliance policy, destination, note commitment, and nullifier derivation. The current local artifact is dev-mode only; production Groth16 proof generation is not yet wired into the demo.
+The implemented RISC Zero guest/host path validates a structured `LockWitness` and commits a versioned `NebulaJournal`. The proof statement checks:
+
+- The source lock witness matches the configured source chain, escrow, token, amount bounds, compliance root, and destination.
+- The Stellar note commitment is nonzero and becomes the public private-note-compatible output.
+- The claim nullifier and event commitment are derived into the public journal.
+- Bad token, wrong escrow, bad compliance, wrong destination, malformed public outputs, wrong image ID, bad seal, wrong journal digest, and replay fixtures fail in tests.
+
+Current proof caveat: the local artifact is `dev` mode. Real Groth16 proof generation and a deployed Nethermind Stellar RISC Zero verifier router are documented production-path work.
 
 ## What Runs On Stellar
 
-The core state transition is the Stellar `NebulaRelay` Soroban contract. It verifies proof validity, checks allowed image/source/compliance config, rejects replayed nullifiers, calls a pool-adapter handoff boundary, and records a private-note-compatible commitment that can be read with `get_note`.
+The core state transition is the `NebulaRelay` Soroban contract. It:
+
+- Requires claimant authorization.
+- Rejects paused claims.
+- Checks the accepted image ID.
+- Calls a verifier-router-compatible `verify(seal, image_id, journal_digest)` path.
+- Decodes and validates the Nebula journal.
+- Checks registered source config and compliance root config.
+- Stores the nullifier to prevent replay.
+- Calls a Nebula-owned pool-adapter handoff boundary.
+- Stores claim and note records readable with `get_claim` and `get_note`.
 
 ## Original Vs Reused
 
-Original Nebula work includes the EVM escrow, proof journal schema, witness/proof artifact adapters, Soroban claim contract, pool adapter layer, auditor packet, scripts, and product UX.
+Original Nebula work includes:
 
-Reference or vendored code is tracked in [docs/reused-code.md](docs/reused-code.md). Nebula includes a Protocol 26-compatible adapter shim for Nethermind's Stellar RISC Zero verifier router ABI, while the vendored verifier contracts remain unmodified. Stage 8 also adds a Nebula-owned Private Payments handoff adapter interface; it does not copy the upstream Private Payments UI or modify upstream pool contracts.
+- EVM `NebulaEscrow` and `MockUSDC`.
+- Canonical `Locked` event parsing and TypeScript witness builder.
+- Shared schemas for `LockWitness`, `NebulaJournal`, `ProofArtifact`, and `AuditorPacket`.
+- RISC Zero guest/host dev proof path.
+- Stellar `NebulaRelay` contract, verifier-router ABI shim, pool-adapter boundary, and tests.
+- Next.js demo UX, fixture flow, failure lab, auditor export, and scripts.
 
-## Mocked Or Relayed In The MVP
+Reused/reference material is documented in [docs/reused-code.md](docs/reused-code.md). The main references are Nethermind `stellar-risc0-verifier`, Nethermind `stellar-private-payments`, OpenZeppelin Stellar contracts, and Stellar documentation snapshots. No upstream UI was copied.
 
-The current local demo uses deterministic fixtures and a dev-mode proof artifact. `NebulaRelay` defaults to calling a verifier router-compatible `verify(seal, image_id, journal_digest)` path, but local tests use an upstream-compatible router harness rather than a deployed Groth16 verifier. The old dev mock verifier remains available only with the explicit `dev-mock-verifier` feature and admin toggle.
+## What Is Mocked Or Relayed In The MVP
 
-For Stellar Private Payments, Stage 8 implements Mode A from the composition plan: Nebula Relay verifies the cross-chain proof and records a private-note-compatible commitment after a pool-adapter handoff succeeds. Direct upstream pool credit is not implemented yet because the current upstream pool API is the full `transact(proof, ext_data, sender)` private transaction flow, not a relay-credit entrypoint.
-
-Important caveat: the current MVP is a ZK relay / proof-gated private deposit prototype, not a complete value bridge. If the user funds the Stellar Private Payments deposit from their own Stellar wallet, value has not been bridged from EVM to Stellar. A real bridge path needs Stellar-side liquidity, CCTP-style canonical settlement, a treasury, or a relayer/market-maker model.
+- The demo proof artifact is dev-mode, not production Groth16.
+- Local Stellar contract tests use a router-compatible harness, not a deployed Groth16 verifier stack.
+- The old dev mock verifier remains only behind the `dev-mock-verifier` feature and explicit admin toggle.
+- Source-chain receipt trie inclusion and finality are not implemented.
+- Private Payments composition is Mode A handoff: Nebula records a private-note-compatible commitment through an adapter boundary. It does not directly credit the upstream pool.
+- User-funded Stellar deposits are not a complete value bridge. Real bridge settlement needs CCTP-style canonical settlement, liquidity, treasury funding, or a relayer/market-maker model.
 
 ## Exact Demo Commands
 
@@ -44,22 +71,30 @@ Install dependencies:
 pnpm install
 ```
 
-Current local validation commands:
-
-```bash
-pnpm test
-forge test
-cargo test --workspace
-cargo test -p nebula-relay-contract --features dev-mock-verifier
-stellar contract build
-```
-
-Stage 13 end-to-end fixture demo:
+Run the deterministic fixture demo:
 
 ```bash
 bash scripts/generate_demo_fixture.sh
 bash scripts/verify_submission.sh artifacts/demo/demo-submission.json
 bash scripts/demo_localnet.sh
+```
+
+Run the full validation matrix used for Stage 15:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+forge test
+cargo test --workspace
+stellar contract build
+```
+
+Generate the current dev proof artifact:
+
+```bash
+cargo run -p nebula-host -- prove --fixture fixtures/valid-lock.json --mode dev --out artifacts/dev-proof.json
 ```
 
 Deployment script dry-runs:
@@ -69,27 +104,36 @@ bash scripts/deploy_localnet.sh --dry-run
 bash scripts/deploy_testnet.sh --dry-run
 ```
 
-Generate the current dev proof artifact:
-
-```bash
-cargo run -p nebula-host -- prove --fixture fixtures/valid-lock.json --mode dev --out artifacts/dev-proof.json
-```
-
 ## Testnet Contract IDs And Source Escrow
 
-No contracts are deployed yet.
+No live testnet contracts are deployed from this workspace yet. The final demo uses deterministic fixture artifacts in `artifacts/demo/`.
 
 | Network | Artifact | ID or address |
 |---|---|---|
-| EVM testnet | NebulaEscrow | TBD |
-| Stellar testnet | NebulaRelay | TBD |
-| Stellar testnet | RISC Zero verifier router | TBD |
-| Stellar testnet | Pool adapter / handoff wrapper | TBD |
+| EVM fixture | NebulaEscrow | `0x1111111111111111111111111111111111111111` |
+| EVM fixture | Mock USDC token | `0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` |
+| Stellar fixture | NebulaRelay | Not deployed; contract tested locally and WASM builds |
+| Stellar fixture | RISC Zero verifier router | Router-compatible harness in tests |
+| Stellar fixture | Pool adapter / handoff wrapper | Harness in tests; Mode A adapter ABI in contract |
+| Stellar testnet | NebulaRelay | Not deployed |
+| Stellar testnet | RISC Zero verifier router | Not configured |
+| Stellar testnet | Pool adapter / handoff wrapper | Not deployed |
+
+## Submission Package
+
+- DoraHacks copy: [docs/dorahacks-submission.md](docs/dorahacks-submission.md)
+- Demo/video script: [docs/demo-script.md](docs/demo-script.md)
+- Final checklist: [docs/final-submission-checklist.md](docs/final-submission-checklist.md)
+- Threat model: [docs/threat-model.md](docs/threat-model.md)
+- Production readiness: [docs/production-readiness.md](docs/production-readiness.md)
+- Known limitations: [docs/known-limitations.md](docs/known-limitations.md)
+
+Recorded video and screenshots are not checked into this repo from the terminal environment. Use the demo script and checklist above to capture the 2-3 minute video before uploading to DoraHacks.
 
 ## Security Limitations
 
-This repository is not audited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. The current local proof artifact is dev-mode, and real Groth16 verification requires a matching RISC Zero proof plus a deployed Nethermind verifier router. Private Payments composition is a Mode A handoff, not a production pool deposit. The current user-funded Stellar deposit path is not a true bridge. Authorized disclosure is part of the design. ASP roots, denylist or non-membership checks, governance, legal review, regulatory review, and security review are required before production deployment.
+This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Real Groth16 verification, receipt-root/finality infrastructure, direct private-pool credit, governance hardening, legal review, regulatory review, and security audits are required before production deployment.
 
 ## Production Path
 
-The production path replaces fixture and relayed inputs with robust finality/receipt-root infrastructure, uses audited verifier and private-payment dependencies, upgrades Mode A handoff to a reviewed pool adapter or upstream relay-credit API, hardens governance and operations, and integrates a regulated stablecoin settlement path such as Circle CCTP only after the proof-gated Stellar claim flow is reliable.
+The production path replaces fixture/dev inputs with audited proof generation, deployed verifier-router verification, robust source-chain finality, audited Private Payments composition, operator governance, monitoring, and a regulated settlement path such as CCTP-backed test USDC first and reviewed production USDC later.
