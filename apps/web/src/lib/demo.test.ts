@@ -29,6 +29,9 @@ describe("frontend demo state", () => {
     expect(state.invalidTokenFailure).toContain("Invalid token rejected");
     expect(state.handoffStatus).toContain("Mode A");
     expect(() => AuditorPacketSchema.parse(state.auditorPacket)).not.toThrow();
+    expect(state.auditorPacket?.verificationInstructions.length).toBeGreaterThan(
+      0
+    );
   });
 
   it("keeps failure lab outcomes readable before and after claim", () => {

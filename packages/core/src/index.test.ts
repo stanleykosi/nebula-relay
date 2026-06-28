@@ -90,6 +90,13 @@ describe("Nebula schemas", () => {
           "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         disclosureMode: "user-exported",
         caveats: ["dev-mode artifact"],
+        verificationInstructions: [
+          {
+            title: "Validate schema",
+            description: "Parse this packet with AuditorPacketSchema.",
+            expected: "The packet is schema-valid.",
+          },
+        ],
       })
     ).not.toThrow();
   });

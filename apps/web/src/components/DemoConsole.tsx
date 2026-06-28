@@ -14,6 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { serializeAuditorPacket } from "@/lib/auditor";
 import { demoConfig } from "@/lib/config";
 import {
   buildFixtureWitness,
@@ -65,7 +66,7 @@ export function DemoConsole() {
   const auditorJson = useMemo(
     () =>
       state.auditorPacket
-        ? JSON.stringify(state.auditorPacket, null, 2)
+        ? serializeAuditorPacket(state.auditorPacket)
         : undefined,
     [state.auditorPacket]
   );
@@ -375,8 +376,8 @@ export function DemoConsole() {
 
         <Panel title="9. Auditor packet" className="span-12">
           <p>
-            User-exported disclosure packet. It contains caveats for dev proofs,
-            fixture data, and Mode A handoff.
+            User-exported disclosure packet with schema fields, verification
+            steps, and caveats for dev proofs, fixture data, and Mode A handoff.
           </p>
           <div className="actions">
             <ActionButton
@@ -393,6 +394,21 @@ export function DemoConsole() {
               <Download size={16} /> Export JSON
             </ActionButton>
           </div>
+          {state.auditorPacket ? (
+            <div className="instruction-list">
+              {state.auditorPacket.verificationInstructions.map(
+                (instruction) => (
+                  <div className="instruction-row" key={instruction.title}>
+                    <strong>{instruction.title}</strong>
+                    <p>{instruction.description}</p>
+                    {instruction.expected ? (
+                      <span>{instruction.expected}</span>
+                    ) : null}
+                  </div>
+                )
+              )}
+            </div>
+          ) : null}
           {auditorJson ? (
             <pre className="hash-row" style={{ whiteSpace: "pre-wrap" }}>
               <code>{auditorJson}</code>

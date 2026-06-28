@@ -1,5 +1,9 @@
 import { BookOpen, RadioTower, ShieldCheck, WalletCards } from "lucide-react";
 import { Badge, HashRow, ModeStrip, Panel } from "@/components/ui";
+import {
+  AUDITOR_VERIFICATION_INSTRUCTIONS,
+  REQUIRED_AUDITOR_CAVEATS,
+} from "@/lib/auditor";
 import { demoConfig } from "@/lib/config";
 import { devProofArtifact, validLockWitness } from "@/lib/fixtures";
 
@@ -93,6 +97,30 @@ export default function DocsPage() {
             nullifier, event commitment, and caveats. It is not a production
             view-key system.
           </p>
+        </Panel>
+
+        <Panel title="Auditor verification" className="span-8">
+          <div className="instruction-list">
+            {AUDITOR_VERIFICATION_INSTRUCTIONS.map((instruction) => (
+              <div className="instruction-row" key={instruction.title}>
+                <strong>{instruction.title}</strong>
+                <p>{instruction.description}</p>
+                {instruction.expected ? (
+                  <span>{instruction.expected}</span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Disclosure caveats" className="span-4">
+          <div className="instruction-list">
+            {REQUIRED_AUDITOR_CAVEATS.map((caveat) => (
+              <div className="instruction-row" key={caveat}>
+                <p>{caveat}</p>
+              </div>
+            ))}
+          </div>
         </Panel>
       </div>
     </main>

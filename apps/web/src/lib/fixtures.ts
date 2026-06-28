@@ -1,8 +1,4 @@
-import type {
-  AuditorPacket,
-  LockWitness,
-  ProofArtifact,
-} from "@nebula/core";
+import type { LockWitness, ProofArtifact } from "@nebula/core";
 import type { EvmReceiptLike } from "@nebula/evm-client";
 
 export const validLockWitness = {
@@ -108,23 +104,3 @@ export const devProofArtifact = {
   witnessHash:
     "0xa481d442d27ad2ec8694fb468bcf466aebe58a9975bfe7c52af4d4aeb454ae56",
 } satisfies ProofArtifact;
-
-export const fixtureAuditorPacket = {
-  version: 1,
-  sourceChainId: validLockWitness.sourceChainId,
-  sourceTxHash: validLockWitness.txHash,
-  sourceLogIndex: validLockWitness.logIndex,
-  stellarClaimTxHash:
-    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  noteCommitment: validLockWitness.stellarNoteCommitment,
-  claimNullifier: devProofArtifact.publicOutputs.claimNullifier,
-  eventCommitment: devProofArtifact.publicOutputs.eventCommitment,
-  proofImageId: devProofArtifact.imageIdHex,
-  journalDigest: devProofArtifact.journalDigestHex,
-  disclosureMode: "user-exported",
-  caveats: [
-    "Fixture/dev proof artifact; not a production Groth16 proof.",
-    "Mode A private-note-compatible handoff; no direct upstream pool credit.",
-    "User-funded Stellar deposit path is not a complete value bridge.",
-  ],
-} satisfies AuditorPacket;

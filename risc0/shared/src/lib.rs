@@ -131,6 +131,15 @@ pub struct ProofArtifact {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AuditorVerificationInstruction {
+    pub title: String,
+    pub description: String,
+    pub command: Option<String>,
+    pub expected: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuditorPacket {
     pub version: u32,
     pub source_chain_id: u64,
@@ -144,6 +153,7 @@ pub struct AuditorPacket {
     pub journal_digest: String,
     pub disclosure_mode: String,
     pub caveats: Vec<String>,
+    pub verification_instructions: Vec<AuditorVerificationInstruction>,
 }
 
 pub fn load_witness(path: impl AsRef<Path>) -> Result<LockWitness, NebulaError> {

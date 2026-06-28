@@ -1,5 +1,4 @@
 import {
-  AuditorPacketSchema,
   LockWitnessSchema,
   ProofArtifactSchema,
   type AuditorPacket,
@@ -7,10 +6,10 @@ import {
   type ProofArtifact,
 } from "@nebula/core";
 import { buildLockWitnessFromReceipt } from "@nebula/evm-client";
+import { buildAuditorPacket } from "./auditor";
 import type { DemoConfig } from "./config";
 import {
   devProofArtifact,
-  fixtureAuditorPacket,
   invalidTokenWitness,
   validLockWitness,
   validReceipt,
@@ -258,10 +257,16 @@ export function showPrivateNoteHandoff(state: DemoState): DemoState {
 }
 
 export function exportAuditorPacket(state: DemoState): DemoState {
+  const witness = state.witness ?? LockWitnessSchema.parse(validLockWitness);
+  const proof = state.proof ?? ProofArtifactSchema.parse(devProofArtifact);
   return completeStep(
     {
       ...state,
-      auditorPacket: AuditorPacketSchema.parse(fixtureAuditorPacket),
+      auditorPacket: buildAuditorPacket({
+        witness,
+        proof,
+        stellarClaimTxHash: state.claimTxHash,
+      }),
     },
     "auditor"
   );

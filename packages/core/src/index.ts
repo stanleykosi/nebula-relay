@@ -79,6 +79,13 @@ export const ProofArtifactSchema = z.object({
   witnessHash: Hex32Schema,
 });
 
+export const AuditorVerificationInstructionSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  command: z.string().min(1).optional(),
+  expected: z.string().min(1).optional(),
+});
+
 export const AuditorPacketSchema = z.object({
   version: z.literal(1),
   sourceChainId: z.number().int().positive(),
@@ -95,10 +102,16 @@ export const AuditorPacketSchema = z.object({
     "view-key-demo",
     "view-key-production-planned",
   ]),
-  caveats: z.array(z.string()),
+  caveats: z.array(z.string().min(1)).min(1),
+  verificationInstructions: z
+    .array(AuditorVerificationInstructionSchema)
+    .min(1),
 });
 
 export type LockWitness = z.infer<typeof LockWitnessSchema>;
 export type NebulaJournal = z.infer<typeof NebulaJournalSchema>;
 export type ProofArtifact = z.infer<typeof ProofArtifactSchema>;
+export type AuditorVerificationInstruction = z.infer<
+  typeof AuditorVerificationInstructionSchema
+>;
 export type AuditorPacket = z.infer<typeof AuditorPacketSchema>;
