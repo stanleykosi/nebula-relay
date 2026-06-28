@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "generatedAt": "2026-06-28T12:18:41.041Z",
+  "fixtureSubmission": "/home/stanley/nebula-relay/artifacts/demo/demo-submission.json",
+  "proofMode": "dev",
+  "journalDigest": "0x763a5cdc714cc36e9374a42cb7994cfc482e7808b405a92ce98fadc7ce9fb1f3",
+  "claimNullifier": "0x1006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b",
+  "liveLocalnet": {
+    "status": "skipped",
+    "blocker": "Set RUN_LIVE=1 after scripts/deploy_localnet.sh writes artifacts/demo/localnet-contracts.env."
+  }
+}

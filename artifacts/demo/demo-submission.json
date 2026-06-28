@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "generatedAt": "2026-06-27T17:15:08Z",
+  "mode": {
+    "network": "fixture",
+    "proofMode": "dev",
+    "verifierMode": "mock/dev-compatible",
+    "privatePaymentsMode": "mode-a-handoff"
+  },
+  "lockWitness": {
+    "version": 1,
+    "sourceChainId": 11155111,
+    "sourceBlockNumber": 123456,
+    "sourceReceiptRoot": "0x5555555555555555555555555555555555555555555555555555555555555555",
+    "txHash": "0x4444444444444444444444444444444444444444444444444444444444444444",
+    "logIndex": 0,
+    "lockId": "0x6666666666666666666666666666666666666666666666666666666666666666",
+    "escrowContract": "0x1111111111111111111111111111111111111111",
+    "senderAddress": "0x3333333333333333333333333333333333333333",
+    "tokenAddress": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "amount": "100000000",
+    "stellarNoteCommitment": "0x7777777777777777777777777777777777777777777777777777777777777777",
+    "complianceHint": "0x8888888888888888888888888888888888888888888888888888888888888888",
+    "complianceRoot": "0x9999999999999999999999999999999999999999999999999999999999999999",
+    "complianceMode": "allowlist-membership",
+    "destinationChainId": 1501,
+    "expected": {
+      "sourceChainId": 11155111,
+      "escrowContract": "0x1111111111111111111111111111111111111111",
+      "tokenAddress": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "minAmount": "1000000",
+      "maxAmount": "500000000",
+      "complianceRoot": "0x9999999999999999999999999999999999999999999999999999999999999999",
+      "destinationChainId": 1501,
+      "networkDomain": "0x4e4542554c415f5354454c4c41525f544553544e45545f563100000000000000",
+      "expiresAtLedger": 999999
+    },
+    "complianceWitness": {
+      "valid": true,
+      "mode": "allowlist-membership"
+    }
+  },
+  "proofArtifact": {
+    "version": 1,
+    "proofMode": "dev",
+    "sealHex": "0x4e4542554c415f4445565f5345414c5f5631763a5cdc714cc36e9374a42cb7994cfc482e7808b405a92ce98fadc7ce9fb1f3",
+    "imageIdHex": "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
+    "journalHex": "0x000000014e4542554c415f5354454c4c41525f544553544e45545f5631000000000000000000000000aa36a7000000000001e24055555555555555555555555555555555555555555555555555555555555555551111111111111111111111111111111111111111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000000000000000000000005f5e100000000000000006477777777777777777777777777777777777777777777777777777777777777779999999999999999999999999999999999999999999999999999999999999999011006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b691eacc317ed90271348ac26f7939932ebbb4783ad4254add2897b4dc758cc4b00000000000005dd000f423f",
+    "journalDigestHex": "0x763a5cdc714cc36e9374a42cb7994cfc482e7808b405a92ce98fadc7ce9fb1f3",
+    "publicOutputs": {
+      "version": 1,
+      "domain": "0x4e4542554c415f5354454c4c41525f544553544e45545f563100000000000000",
+      "sourceChainId": 11155111,
+      "sourceBlockNumber": 123456,
+      "sourceReceiptRoot": "0x5555555555555555555555555555555555555555555555555555555555555555",
+      "escrowContract": "0x1111111111111111111111111111111111111111",
+      "token": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "amount": "100000000",
+      "amountBucket": 100,
+      "stellarNoteCommitment": "0x7777777777777777777777777777777777777777777777777777777777777777",
+      "complianceRoot": "0x9999999999999999999999999999999999999999999999999999999999999999",
+      "complianceMode": 1,
+      "claimNullifier": "0x1006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b",
+      "eventCommitment": "0x691eacc317ed90271348ac26f7939932ebbb4783ad4254add2897b4dc758cc4b",
+      "destinationChainId": 1501,
+      "expiresAtLedger": 999999
+    },
+    "generatedAt": "2026-06-27T17:15:08Z",
+    "witnessHash": "0xa481d442d27ad2ec8694fb468bcf466aebe58a9975bfe7c52af4d4aeb454ae56"
+  },
+  "stellarClaim": {
+    "mode": "fixture",
+    "txHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "nullifier": "0x1006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b",
+    "nullifierStored": true,
+    "replayFailure": "NebulaRelay NullifierAlreadyClaimed (#15)",
+    "invalidTokenFailure": "Invalid token rejected: witness token does not match expected token.",
+    "privateNoteHandoff": "Mode A handoff ready: private-note-compatible commitment recorded; direct pool credit is planned."
+  },
+  "auditorPacket": {
+    "version": 1,
+    "sourceChainId": 11155111,
+    "sourceTxHash": "0x4444444444444444444444444444444444444444444444444444444444444444",
+    "sourceLogIndex": 0,
+    "stellarClaimTxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "noteCommitment": "0x7777777777777777777777777777777777777777777777777777777777777777",
+    "claimNullifier": "0x1006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b",
+    "eventCommitment": "0x691eacc317ed90271348ac26f7939932ebbb4783ad4254add2897b4dc758cc4b",
+    "proofImageId": "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
+    "journalDigest": "0x763a5cdc714cc36e9374a42cb7994cfc482e7808b405a92ce98fadc7ce9fb1f3",
+    "disclosureMode": "user-exported",
+    "caveats": [
+      "Dev proof artifact; not a production Groth16 proof.",
+      "User-exported selective disclosure; the user chooses when and where to share it.",
+      "This packet is not a production view-key system and does not provide ongoing account surveillance.",
+      "Packet does not reveal private keys, note secrets, recipient secrets, or allowlist witness paths.",
+      "Mode A private-note-compatible handoff; no direct upstream pool credit is claimed.",
+      "User-funded Stellar deposit path is not a complete value bridge."
+    ],
+    "verificationInstructions": [
+      {
+        "title": "Validate packet schema",
+        "description": "Parse the JSON with @nebula/core AuditorPacketSchema before relying on any field.",
+        "expected": "The packet has version 1, required hashes, at least one caveat, and verification instructions."
+      },
+      {
+        "title": "Confirm source lock",
+        "description": "Compare sourceChainId, sourceTxHash, and sourceLogIndex against the source-chain receipt or deterministic fixture.",
+        "expected": "The referenced log is the canonical NebulaEscrow Locked event for this claim."
+      },
+      {
+        "title": "Confirm proof binding",
+        "description": "Compare proofImageId and journalDigest against the proof artifact supplied to NebulaRelay.",
+        "expected": "The proof artifact commits to the same note commitment, nullifier, event commitment, and compliance root."
+      },
+      {
+        "title": "Confirm Stellar claim",
+        "description": "Check the Stellar claim transaction when one is present, then confirm the nullifier is stored once.",
+        "expected": "A replay with the same claimNullifier fails with NebulaRelay's replay protection."
+      },
+      {
+        "title": "Review disclosure caveats",
+        "description": "Read every caveat before treating this as audit evidence.",
+        "expected": "The packet is user-controlled selective disclosure, not production view-key disclosure."
+      }
+    ]
+  }
+}

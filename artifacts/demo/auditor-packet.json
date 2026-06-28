@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "sourceChainId": 11155111,
+  "sourceTxHash": "0x4444444444444444444444444444444444444444444444444444444444444444",
+  "sourceLogIndex": 0,
+  "stellarClaimTxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "noteCommitment": "0x7777777777777777777777777777777777777777777777777777777777777777",
+  "claimNullifier": "0x1006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b",
+  "eventCommitment": "0x691eacc317ed90271348ac26f7939932ebbb4783ad4254add2897b4dc758cc4b",
+  "proofImageId": "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
+  "journalDigest": "0x763a5cdc714cc36e9374a42cb7994cfc482e7808b405a92ce98fadc7ce9fb1f3",
+  "disclosureMode": "user-exported",
+  "caveats": [
+    "Dev proof artifact; not a production Groth16 proof.",
+    "User-exported selective disclosure; the user chooses when and where to share it.",
+    "This packet is not a production view-key system and does not provide ongoing account surveillance.",
+    "Packet does not reveal private keys, note secrets, recipient secrets, or allowlist witness paths.",
+    "Mode A private-note-compatible handoff; no direct upstream pool credit is claimed.",
+    "User-funded Stellar deposit path is not a complete value bridge."
+  ],
+  "verificationInstructions": [
+    {
+      "title": "Validate packet schema",
+      "description": "Parse the JSON with @nebula/core AuditorPacketSchema before relying on any field.",
+      "expected": "The packet has version 1, required hashes, at least one caveat, and verification instructions."
+    },
+    {
+      "title": "Confirm source lock",
+      "description": "Compare sourceChainId, sourceTxHash, and sourceLogIndex against the source-chain receipt or deterministic fixture.",
+      "expected": "The referenced log is the canonical NebulaEscrow Locked event for this claim."
+    },
+    {
+      "title": "Confirm proof binding",
+      "description": "Compare proofImageId and journalDigest against the proof artifact supplied to NebulaRelay.",
+      "expected": "The proof artifact commits to the same note commitment, nullifier, event commitment, and compliance root."
+    },
+    {
+      "title": "Confirm Stellar claim",
+      "description": "Check the Stellar claim transaction when one is present, then confirm the nullifier is stored once.",
+      "expected": "A replay with the same claimNullifier fails with NebulaRelay's replay protection."
+    },
+    {
+      "title": "Review disclosure caveats",
+      "description": "Read every caveat before treating this as audit evidence.",
+      "expected": "The packet is user-controlled selective disclosure, not production view-key disclosure."
+    }
+  ]
+}

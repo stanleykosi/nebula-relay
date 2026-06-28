@@ -54,6 +54,21 @@ cargo test -p nebula-relay-contract --features dev-mock-verifier
 stellar contract build
 ```
 
+Stage 13 end-to-end fixture demo:
+
+```bash
+bash scripts/generate_demo_fixture.sh
+bash scripts/verify_submission.sh artifacts/demo/demo-submission.json
+bash scripts/demo_localnet.sh
+```
+
+Deployment script dry-runs:
+
+```bash
+bash scripts/deploy_localnet.sh --dry-run
+bash scripts/deploy_testnet.sh --dry-run
+```
+
 Generate the current dev proof artifact:
 
 ```bash
