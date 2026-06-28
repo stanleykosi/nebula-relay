@@ -1,0 +1,31 @@
+{
+  "name": "@nebula/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node node_modules/next/dist/bin/next dev --webpack",
+    "build": "node node_modules/next/dist/bin/next build --webpack",
+    "lint": "node ../../node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "typecheck": "node ../../node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "test": "node ../../node_modules/.pnpm/vitest@4.0.16/node_modules/vitest/vitest.mjs run src"
+  },
+  "dependencies": {
+    "@nebula/core": "workspace:*",
+    "@nebula/evm-client": "workspace:*",
+    "@nebula/stellar-client": "workspace:*",
+    "@tanstack/react-query": "^5.101.1",
+    "lucide-react": "^1.21.0",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.1",
+    "@types/node": "^26.0.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.3.1",
+    "vitest": "4.0.16"
+  }
+}

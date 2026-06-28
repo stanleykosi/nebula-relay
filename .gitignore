@@ -11,9 +11,9 @@ out/
 cache/
 
 # Docs / planning pack
-docs/
-source-context/
-templates/
+/docs/
+/source-context/
+/templates/
 /*.md
 !/README.md
 
@@ -45,3 +45,4 @@ contracts/stellar/**/test_snapshots/
 
 # Logs
 *.log
+*.tsbuildinfo
