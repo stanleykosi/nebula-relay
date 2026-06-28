@@ -633,6 +633,81 @@ fn router_rejects_wrong_journal_digest() {
 }
 
 #[test]
+fn router_error_fails_before_handoff_and_storage() {
+    let s = setup();
+    let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
+    s.configure_router(&seal, &image_id, &journal, true);
+
+    assert!(s
+        .client()
+        .try_claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env))
+        .is_err());
+    assert!(!s.adapter().was_called());
+    assert!(!s.client().is_claimed(&nullifier));
+}
+
+#[test]
+fn admin_registration_rejects_invalid_source_config() {
+    let s = setup();
+    let witness = load_witness(fixture("valid-lock.json")).unwrap();
+    let escrow = hex20(&s.env, &witness.expected.escrow_contract);
+    let token = hex20(&s.env, &witness.expected.token_address);
+    let zero20 = BytesN::from_array(&s.env, &[0u8; 20]);
+
+    assert!(s
+        .client()
+        .try_register_source(&s.admin, &0u64, &escrow, &token, &1i128, &2i128, &true)
+        .is_err());
+    assert!(s
+        .client()
+        .try_register_source(
+            &s.admin,
+            &witness.source_chain_id,
+            &zero20,
+            &token,
+            &1i128,
+            &2i128,
+            &true,
+        )
+        .is_err());
+    assert!(s
+        .client()
+        .try_register_source(
+            &s.admin,
+            &witness.source_chain_id,
+            &escrow,
+            &zero20,
+            &1i128,
+            &2i128,
+            &true,
+        )
+        .is_err());
+}
+
+#[test]
+fn admin_registration_rejects_invalid_compliance_config() {
+    let s = setup();
+    let root = hex32(
+        &s.env,
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    );
+    let zero32 = BytesN::from_array(&s.env, &[0u8; 32]);
+
+    assert!(s
+        .client()
+        .try_register_compliance_root(&s.admin, &zero32, &1u32, &999_999u32, &true)
+        .is_err());
+    assert!(s
+        .client()
+        .try_register_compliance_root(&s.admin, &root, &3u32, &999_999u32, &true)
+        .is_err());
+    assert!(s
+        .client()
+        .try_register_compliance_root(&s.admin, &root, &1u32, &1u32, &true)
+        .is_err());
+}
+
+#[test]
 fn invalid_fixtures_fail_guest_validation() {
     for name in [
         "wrong-token.json",
@@ -709,6 +784,42 @@ fn contract_rejects_wrong_destination_journal() {
     let mut journal = valid_journal();
     journal.destination_chain_id = 1_502;
     let (seal, image_id, journal_bytes) = signed_journal(&s.env, &journal);
+    s.configure_router(&seal, &image_id, &journal_bytes, false);
+    assert!(s
+        .client()
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal_bytes,
+            &Bytes::new(&s.env),
+        )
+        .is_err());
+}
+
+#[test]
+fn contract_rejects_malformed_public_outputs() {
+    let s = setup();
+
+    let mut zero_note = valid_journal();
+    zero_note.stellar_note_commitment =
+        "0x0000000000000000000000000000000000000000000000000000000000000000".to_owned();
+    let (seal, image_id, journal_bytes) = signed_journal(&s.env, &zero_note);
+    s.configure_router(&seal, &image_id, &journal_bytes, false);
+    assert!(s
+        .client()
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal_bytes,
+            &Bytes::new(&s.env),
+        )
+        .is_err());
+
+    let mut wrong_bucket = valid_journal();
+    wrong_bucket.amount_bucket += 1;
+    let (seal, image_id, journal_bytes) = signed_journal(&s.env, &wrong_bucket);
     s.configure_router(&seal, &image_id, &journal_bytes, false);
     assert!(s
         .client()

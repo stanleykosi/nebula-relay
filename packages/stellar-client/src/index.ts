@@ -19,6 +19,7 @@ export const nebulaRelayErrorNames = {
   16: "PoolAdapterFailed",
   17: "WrongDestination",
   18: "VerifierRouterFailed",
+  19: "InvalidConfig",
 } as const;
 
 export type NebulaRelayErrorCode = keyof typeof nebulaRelayErrorNames;

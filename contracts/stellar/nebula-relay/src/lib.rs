@@ -13,6 +13,7 @@ use pool_adapter::NebulaPoolAdapterClient;
 use verifier_router::RiscZeroVerifierRouterClient;
 
 const JOURNAL_LEN: u32 = 289;
+const MAX_COMPLIANCE_MODE: u32 = 2;
 #[cfg(feature = "dev-mock-verifier")]
 const DEV_SEAL_PREFIX: &[u8; 18] = b"NEBULA_DEV_SEAL_V1";
 const DEMO_DESTINATION_CHAIN_ID: u64 = 1_501;
@@ -39,6 +40,7 @@ pub enum Error {
     PoolAdapterFailed = 16,
     WrongDestination = 17,
     VerifierRouterFailed = 18,
+    InvalidConfig = 19,
 }
 
 #[contracttype]
@@ -132,6 +134,12 @@ impl NebulaRelay {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(Error::AlreadyInitialized);
         }
+        if is_zero_bytes(&env, &accepted_image_id) {
+            return Err(Error::InvalidImageId);
+        }
+        if is_zero_bytes(&env, &network_domain) {
+            return Err(Error::InvalidDomain);
+        }
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
@@ -165,6 +173,12 @@ impl NebulaRelay {
         active: bool,
     ) -> Result<(), Error> {
         require_admin(&env, &admin)?;
+        if source_chain_id == 0
+            || is_zero_bytes(&env, &escrow_contract)
+            || is_zero_bytes(&env, &token)
+        {
+            return Err(Error::InvalidConfig);
+        }
         if min_amount <= 0 || max_amount < min_amount {
             return Err(Error::AmountOutOfBounds);
         }
@@ -188,6 +202,12 @@ impl NebulaRelay {
         active: bool,
     ) -> Result<(), Error> {
         require_admin(&env, &admin)?;
+        if is_zero_bytes(&env, &root) || mode > MAX_COMPLIANCE_MODE {
+            return Err(Error::ComplianceRootInvalid);
+        }
+        if active && expires_at_ledger <= env.ledger().sequence() {
+            return Err(Error::ReceiptRootExpired);
+        }
         env.storage().persistent().set(
             &DataKey::ComplianceRoot(root, mode),
             &ComplianceRootConfig {
@@ -353,7 +373,10 @@ fn verify_proof(
         .get(&DataKey::VerifierRouter)
         .ok_or(Error::NotInitialized)?;
     let router = RiscZeroVerifierRouterClient::new(env, &router_address);
-    router.verify(seal, image_id, &journal_digest);
+    router
+        .try_verify(seal, image_id, &journal_digest)
+        .map_err(|_| Error::InvalidProof)?
+        .map_err(|_| Error::VerifierRouterFailed)?;
     Ok(())
 }
 
@@ -378,6 +401,22 @@ fn verify_dev_mock(env: &Env, seal: &Bytes, journal_digest: &BytesN<32>) -> Resu
 }
 
 fn validate_journal(env: &Env, journal: &NebulaJournalV1) -> Result<(), Error> {
+    if journal.compliance_mode > MAX_COMPLIANCE_MODE
+        || is_zero_bytes(env, &journal.source_receipt_root)
+        || is_zero_bytes(env, &journal.stellar_note_commitment)
+        || is_zero_bytes(env, &journal.claim_nullifier)
+        || is_zero_bytes(env, &journal.event_commitment)
+    {
+        return Err(Error::InvalidJournal);
+    }
+    if journal.amount <= 0 {
+        return Err(Error::AmountOutOfBounds);
+    }
+    let expected_bucket = journal.amount / 1_000_000;
+    if expected_bucket > u64::MAX as i128 || journal.amount_bucket != expected_bucket as u64 {
+        return Err(Error::InvalidJournal);
+    }
+
     let domain: BytesN<32> = env
         .storage()
         .instance()
@@ -514,4 +553,8 @@ fn read_u64(bytes: &Bytes, offset: u32) -> Result<u64, Error> {
 
 fn read_u128(bytes: &Bytes, offset: u32) -> Result<u128, Error> {
     Ok(u128::from_be_bytes(read_n::<16>(bytes, offset)?.to_array()))
+}
+
+fn is_zero_bytes<const N: usize>(env: &Env, value: &BytesN<N>) -> bool {
+    *value == BytesN::from_array(env, &[0u8; N])
 }

@@ -105,6 +105,22 @@ contract NebulaEscrowTest {
         } catch {}
     }
 
+    function testZeroTokenConfigurationFails() public {
+        try escrow.setSupportedToken(address(0), true) {
+            assert(false);
+        } catch {}
+
+        try escrow.setAmountBounds(address(0), 1, 2) {
+            assert(false);
+        } catch {}
+    }
+
+    function testZeroDestinationFails() public {
+        try escrow.lock(address(token), AMOUNT, NOTE, COMPLIANCE, 0) {
+            assert(false);
+        } catch {}
+    }
+
     function testPauseAndUnpause() public {
         escrow.pause();
         try escrow.lock(address(token), AMOUNT, NOTE, COMPLIANCE, DESTINATION) {

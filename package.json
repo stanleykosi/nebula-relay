@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "packageManager": "pnpm@9.15.1",
   "scripts": {
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
+    "build": "node node_modules/.pnpm/turbo@2.10.0/node_modules/turbo/bin/turbo run build",
+    "lint": "node node_modules/.pnpm/turbo@2.10.0/node_modules/turbo/bin/turbo run lint",
+    "typecheck": "node node_modules/.pnpm/turbo@2.10.0/node_modules/turbo/bin/turbo run typecheck",
+    "test": "node node_modules/.pnpm/turbo@2.10.0/node_modules/turbo/bin/turbo run test",
     "validate": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {

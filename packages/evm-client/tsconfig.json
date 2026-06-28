@@ -7,8 +7,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,
-    "skipLibCheck": true,
-    "types": ["vitest/globals"]
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"]

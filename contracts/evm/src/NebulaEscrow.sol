@@ -29,6 +29,8 @@ contract NebulaEscrow {
     error UnsupportedToken(address token);
     error InvalidAmount(uint256 amount, uint256 minAmount, uint256 maxAmount);
     error ZeroNoteCommitment();
+    error ZeroToken();
+    error InvalidDestination(uint256 destinationChainId);
     error LockAlreadyExists(bytes32 lockId);
     error TransferFailed();
 
@@ -60,6 +62,12 @@ contract NebulaEscrow {
     ) external returns (bytes32 lockId) {
         if (paused) {
             revert Paused();
+        }
+        if (token == address(0)) {
+            revert ZeroToken();
+        }
+        if (destinationChainId == 0) {
+            revert InvalidDestination(destinationChainId);
         }
         if (!supportedToken[token]) {
             revert UnsupportedToken(token);
@@ -132,6 +140,9 @@ contract NebulaEscrow {
     }
 
     function setSupportedToken(address token, bool supported) external onlyOwner {
+        if (token == address(0)) {
+            revert ZeroToken();
+        }
         supportedToken[token] = supported;
     }
 
@@ -139,6 +150,9 @@ contract NebulaEscrow {
         external
         onlyOwner
     {
+        if (token == address(0)) {
+            revert ZeroToken();
+        }
         if (minAmount == 0 || maxAmount < minAmount) {
             revert InvalidAmount(0, minAmount, maxAmount);
         }

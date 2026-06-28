@@ -1,10 +1,10 @@
 # Nebula Relay
 
-Compliance-forward private cross-chain remittance into Stellar, powered by RISC Zero proofs and Stellar smart contracts.
+Compliance-forward proof-gated relay prototype for private Stellar-side claims, designed around RISC Zero proofs and Stellar smart contracts.
 
 ## What Nebula Relay Is
 
-Nebula Relay is a hackathon MVP for proving that an approved EVM stablecoin lock happened, then privately claiming a Stellar payment note. The intended flow is:
+Nebula Relay is a hackathon MVP for proving that an approved EVM stablecoin lock happened, then claiming a private-note-compatible Stellar record. The intended production-shaped flow is:
 
 ```text
 EVM testnet lock -> RISC Zero proof -> Stellar Soroban claim -> private-note-compatible output
@@ -24,7 +24,7 @@ The core state transition is the Stellar `NebulaRelay` Soroban contract. It veri
 
 ## Original Vs Reused
 
-Original Nebula work will include the EVM escrow, proof journal schema, witness/proof artifact adapters, Soroban claim contract, pool adapter layer, auditor packet, and product UX.
+Original Nebula work includes the EVM escrow, proof journal schema, witness/proof artifact adapters, Soroban claim contract, pool adapter layer, auditor packet, scripts, and product UX.
 
 Reference or vendored code is tracked in [docs/reused-code.md](docs/reused-code.md). Nebula includes a Protocol 26-compatible adapter shim for Nethermind's Stellar RISC Zero verifier router ABI, while the vendored verifier contracts remain unmodified. Stage 8 also adds a Nebula-owned Private Payments handoff adapter interface; it does not copy the upstream Private Payments UI or modify upstream pool contracts.
 
