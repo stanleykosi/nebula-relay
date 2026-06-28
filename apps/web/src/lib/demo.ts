@@ -223,7 +223,7 @@ export function settleFixtureCctp(state: DemoState): DemoState {
   return completeStep(
     {
       ...state,
-      cctpMessage: "0x010203040506",
+      cctpMessage: validLockWitness.cctpSettlement.message,
       cctpAttestation: "0x0a0b0c0d",
       cctpMessageHash: validLockWitness.cctpSettlement.messageHash,
       cctpMintTxHash:

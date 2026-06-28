@@ -414,7 +414,8 @@ fn bytes_from_hex(env: &Env, value: &str) -> Bytes {
 }
 
 fn cctp_message(env: &Env) -> Bytes {
-    bytes_from_hex(env, "0x010203040506")
+    let witness = load_witness(fixture("valid-lock.json")).unwrap();
+    bytes_from_hex(env, &witness.cctp_settlement.message)
 }
 
 fn cctp_attestation(env: &Env) -> Bytes {

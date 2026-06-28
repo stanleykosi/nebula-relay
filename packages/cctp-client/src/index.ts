@@ -143,9 +143,52 @@ export interface CctpSettlementBinding {
   sourceDomain: number;
   destinationDomain: number;
   nonce: Hex32;
+  message: Hex;
   messageHash: Hex32;
   attestationHash: Hex32;
   mintRecipient: Hex32;
+}
+
+export interface ParsedStellarForwarderHookData {
+  version: number;
+  recipient: string;
+  payload: Hex;
+}
+
+export interface ParsedCctpBurnMessageV2 {
+  version: number;
+  burnToken: Hex32;
+  mintRecipient: Hex32;
+  amount: bigint;
+  messageSender: Hex32;
+  maxFee: bigint;
+  feeExecuted: bigint;
+  expirationBlock: bigint;
+  hookData: Hex;
+}
+
+export interface ParsedCctpMessageV2 {
+  version: number;
+  sourceDomain: number;
+  destinationDomain: number;
+  nonce: Hex32;
+  sender: Hex32;
+  recipient: Hex32;
+  destinationCaller: Hex32;
+  minFinalityThreshold: number;
+  finalityThresholdExecuted: number;
+  burnMessage: ParsedCctpBurnMessageV2;
+}
+
+export interface AssertCctpMessageMatchesSettlementParams {
+  message: Hex;
+  expectedSourceDomain: number;
+  expectedDestinationDomain?: number;
+  expectedNonce: Hex32;
+  expectedBurnToken: Address;
+  expectedAmount: bigint;
+  expectedMessageSender: Address;
+  expectedMintRecipient: Hex32;
 }
 
 export interface BuildCctpMintAndForwardTransactionParams
@@ -206,6 +249,7 @@ export class CctpClientError extends Error {
       | "ATTESTATION_HTTP_ERROR"
       | "ATTESTATION_MALFORMED"
       | "ATTESTATION_TIMEOUT"
+      | "INVALID_CCTP_MESSAGE"
       | "INVALID_ADDRESS"
       | "INVALID_AMOUNT"
       | "INVALID_DOMAIN"
@@ -298,9 +342,150 @@ export function buildStellarForwarderHookData(params: {
   return bytesToHex(hook);
 }
 
+export function parseStellarForwarderHookData(
+  hookData: Hex
+): ParsedStellarForwarderHookData {
+  const bytes = hexToBytes(normalizeHex(hookData, "hookData"));
+  if (bytes.length < 32) {
+    throw new CctpClientError(
+      "INVALID_CCTP_MESSAGE",
+      "Stellar CCTP Forwarder hook data must be at least 32 bytes"
+    );
+  }
+  const version = readU32Be(bytes, 24, "hookData.version");
+  const recipientLength = readU32Be(bytes, 28, "hookData.recipientLength");
+  const recipientStart = 32;
+  const recipientEnd = recipientStart + recipientLength;
+  if (recipientEnd > bytes.length) {
+    throw new CctpClientError(
+      "INVALID_CCTP_MESSAGE",
+      "Stellar CCTP Forwarder hook recipient exceeds hook data length"
+    );
+  }
+  const recipient = asciiString(bytes.slice(recipientStart, recipientEnd));
+  assertValidStellarRecipient(recipient);
+  return {
+    version,
+    recipient,
+    payload: bytesToHex(bytes.slice(recipientEnd)),
+  };
+}
+
+export function parseCctpMessageV2(message: Hex): ParsedCctpMessageV2 {
+  const bytes = hexToBytes(normalizeHex(message, "message"));
+  if (bytes.length < 376) {
+    throw new CctpClientError(
+      "INVALID_CCTP_MESSAGE",
+      "CCTP V2 message must include the 148-byte envelope and 228-byte burn body"
+    );
+  }
+
+  const burnBodyOffset = 148;
+  return {
+    version: readU32Be(bytes, 0, "message.version"),
+    sourceDomain: readU32Be(bytes, 4, "message.sourceDomain"),
+    destinationDomain: readU32Be(bytes, 8, "message.destinationDomain"),
+    nonce: readHex32(bytes, 12, "message.nonce"),
+    sender: readHex32(bytes, 44, "message.sender"),
+    recipient: readHex32(bytes, 76, "message.recipient"),
+    destinationCaller: readHex32(bytes, 108, "message.destinationCaller"),
+    minFinalityThreshold: readU32Be(bytes, 140, "message.minFinalityThreshold"),
+    finalityThresholdExecuted: readU32Be(
+      bytes,
+      144,
+      "message.finalityThresholdExecuted"
+    ),
+    burnMessage: {
+      version: readU32Be(bytes, burnBodyOffset, "burnMessage.version"),
+      burnToken: readHex32(bytes, burnBodyOffset + 4, "burnMessage.burnToken"),
+      mintRecipient: readHex32(
+        bytes,
+        burnBodyOffset + 36,
+        "burnMessage.mintRecipient"
+      ),
+      amount: readUint256(bytes, burnBodyOffset + 68, "burnMessage.amount"),
+      messageSender: readHex32(
+        bytes,
+        burnBodyOffset + 100,
+        "burnMessage.messageSender"
+      ),
+      maxFee: readUint256(bytes, burnBodyOffset + 132, "burnMessage.maxFee"),
+      feeExecuted: readUint256(
+        bytes,
+        burnBodyOffset + 164,
+        "burnMessage.feeExecuted"
+      ),
+      expirationBlock: readUint256(
+        bytes,
+        burnBodyOffset + 196,
+        "burnMessage.expirationBlock"
+      ),
+      hookData: bytesToHex(bytes.slice(burnBodyOffset + 228)),
+    },
+  };
+}
+
+export function assertCctpMessageMatchesSettlement(
+  params: AssertCctpMessageMatchesSettlementParams
+): ParsedCctpMessageV2 {
+  const parsed = parseCctpMessageV2(params.message);
+  const destinationDomain = params.expectedDestinationDomain ?? CCTP_STELLAR_DOMAIN;
+  const expectedBurnToken = evmAddressToBytes32(params.expectedBurnToken);
+  const expectedMessageSender = evmAddressToBytes32(params.expectedMessageSender);
+  const expectedMintRecipient = normalizeHex32(
+    params.expectedMintRecipient,
+    "expectedMintRecipient"
+  );
+
+  assertEqualNumber(
+    "CCTP source domain",
+    parsed.sourceDomain,
+    normalizeDomain(params.expectedSourceDomain, "expectedSourceDomain")
+  );
+  assertEqualNumber(
+    "CCTP destination domain",
+    parsed.destinationDomain,
+    normalizeDomain(destinationDomain, "expectedDestinationDomain")
+  );
+  assertEqualHex("CCTP nonce", parsed.nonce, params.expectedNonce);
+  assertEqualHex("CCTP destination caller", parsed.destinationCaller, expectedMintRecipient);
+  assertEqualHex(
+    "CCTP burn mint recipient",
+    parsed.burnMessage.mintRecipient,
+    expectedMintRecipient
+  );
+  assertEqualHex("CCTP burn token", parsed.burnMessage.burnToken, expectedBurnToken);
+  assertEqualHex(
+    "CCTP burn message sender",
+    parsed.burnMessage.messageSender,
+    expectedMessageSender
+  );
+  if (parsed.burnMessage.amount !== params.expectedAmount) {
+    throw new CctpClientError(
+      "INVALID_CCTP_MESSAGE",
+      `CCTP amount mismatch: ${parsed.burnMessage.amount} != ${params.expectedAmount}`
+    );
+  }
+  if (parsed.burnMessage.maxFee >= parsed.burnMessage.amount) {
+    throw new CctpClientError(
+      "INVALID_CCTP_MESSAGE",
+      "CCTP maxFee must be less than amount"
+    );
+  }
+  if (parsed.burnMessage.hookData === "0x") {
+    throw new CctpClientError(
+      "INVALID_CCTP_MESSAGE",
+      "CCTP burn message must include non-empty hook data"
+    );
+  }
+
+  return parsed;
+}
+
 export function createCctpSettlementBinding(
   params: CctpSettlementBindingParams
 ): CctpSettlementBinding {
+  const message = normalizeHex(params.message, "message");
   return {
     sourceDomain: normalizeDomain(params.sourceDomain, "sourceDomain"),
     destinationDomain: normalizeDomain(
@@ -308,7 +493,8 @@ export function createCctpSettlementBinding(
       "destinationDomain"
     ),
     nonce: normalizeHex32(params.nonce, "nonce"),
-    messageHash: sha256(normalizeHex(params.message, "message")) as Hex32,
+    message,
+    messageHash: sha256(message) as Hex32,
     attestationHash: sha256(
       normalizeHex(params.attestation, "attestation")
     ) as Hex32,
@@ -324,6 +510,11 @@ export function stellarContractStrkeyToBytes32(contractId: string): Hex32 {
     );
   }
   return bytesToHex(StellarSdk.StrKey.decodeContract(contractId)) as Hex32;
+}
+
+export function evmAddressToBytes32(address: Address): Hex32 {
+  const normalized = normalizeAddress(address, "address");
+  return `0x000000000000000000000000${normalized.slice(2).toLowerCase()}` as Hex32;
 }
 
 export function buildCctpMintAndForwardOperation(
@@ -551,6 +742,21 @@ function normalizeHex32(hex: Hex32, field: string): Hex32 {
   return normalized as Hex32;
 }
 
+function assertEqualHex(label: string, left: Hex32, right: Hex32): void {
+  if (normalizeHex32(left, label).toLowerCase() !== normalizeHex32(right, label).toLowerCase()) {
+    throw new CctpClientError("INVALID_CCTP_MESSAGE", `${label} mismatch`);
+  }
+}
+
+function assertEqualNumber(label: string, left: number, right: number): void {
+  if (left !== right) {
+    throw new CctpClientError(
+      "INVALID_CCTP_MESSAGE",
+      `${label} mismatch: ${left} != ${right}`
+    );
+  }
+}
+
 function hexToBytes(hex: Hex): Uint8Array {
   const normalized = normalizeHex(hex, "hex");
   const bytes = new Uint8Array(normalized.length / 2 - 1);
@@ -558,6 +764,54 @@ function hexToBytes(hex: Hex): Uint8Array {
     bytes[(i - 2) / 2] = Number.parseInt(normalized.slice(i, i + 2), 16);
   }
   return bytes;
+}
+
+function readU32Be(bytes: Uint8Array, offset: number, field: string): number {
+  assertLength(bytes, offset, 4, field);
+  return (
+    bytes[offset] * 0x1000000 +
+    ((bytes[offset + 1] << 16) |
+      (bytes[offset + 2] << 8) |
+      bytes[offset + 3])
+  );
+}
+
+function readHex32(bytes: Uint8Array, offset: number, field: string): Hex32 {
+  assertLength(bytes, offset, 32, field);
+  return bytesToHex(bytes.slice(offset, offset + 32)) as Hex32;
+}
+
+function readUint256(bytes: Uint8Array, offset: number, field: string): bigint {
+  assertLength(bytes, offset, 32, field);
+  return BigInt(bytesToHex(bytes.slice(offset, offset + 32)));
+}
+
+function assertLength(
+  bytes: Uint8Array,
+  offset: number,
+  length: number,
+  field: string
+): void {
+  if (offset < 0 || length < 0 || offset + length > bytes.length) {
+    throw new CctpClientError(
+      "INVALID_CCTP_MESSAGE",
+      `${field} exceeds CCTP message length`
+    );
+  }
+}
+
+function asciiString(bytes: Uint8Array): string {
+  let out = "";
+  for (const byte of bytes) {
+    if (byte > 0x7f) {
+      throw new CctpClientError(
+        "INVALID_CCTP_MESSAGE",
+        "Stellar CCTP Forwarder hook recipient must be ASCII"
+      );
+    }
+    out += String.fromCharCode(byte);
+  }
+  return out;
 }
 
 function bytesToHex(bytes: Uint8Array): Hex {

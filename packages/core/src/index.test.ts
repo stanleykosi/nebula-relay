@@ -55,7 +55,7 @@ describe("Nebula schemas", () => {
       cctpNonce:
         "0x1111111111111111111111111111111111111111111111111111111111111111",
       cctpMessageHash:
-        "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
+        "0x428f0dc1a457bec99fe9a1e8d375a01d4fc7c6b0691cef934fbbbfe30c300b67",
       cctpAttestationHash:
         "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
       cctpMintRecipient:
@@ -99,7 +99,7 @@ describe("Nebula schemas", () => {
         journalDigest:
           "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         cctpMessageHash:
-          "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
+          "0x428f0dc1a457bec99fe9a1e8d375a01d4fc7c6b0691cef934fbbbfe30c300b67",
         cctpAttestationHash:
           "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
         cctpNonce:

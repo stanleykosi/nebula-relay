@@ -8,12 +8,16 @@ import {
   CCTP_DOMAIN_IDS,
   CCTP_FINALITY_THRESHOLDS,
   CCTP_STELLAR_DOMAIN,
+  assertCctpMessageMatchesSettlement,
   cctpTokenMessengerV2Abi,
   createCctpBurnToStellarCall,
   createCctpSettlementBinding,
+  evmAddressToBytes32,
   encodeCctpBurnWithHookData,
   fetchCctpAttestationOnce,
   getIrisMessagesUrl,
+  parseCctpMessageV2,
+  parseStellarForwarderHookData,
   parseIrisMessagesResponse,
   pollCctpAttestation,
   STELLAR_CCTP_CONTRACTS,
@@ -26,6 +30,7 @@ const txHash =
   "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as Hex32;
 const tokenMessenger = "0x1111111111111111111111111111111111111111";
 const burnToken = "0x2222222222222222222222222222222222222222";
+const escrowAddress = "0x3333333333333333333333333333333333333333";
 const sourceDomain = CCTP_DOMAIN_IDS.base;
 const stellarRecipient = StellarSdk.Keypair.random().publicKey();
 const forwarder = STELLAR_CCTP_CONTRACTS.testnet.cctpForwarder;
@@ -50,6 +55,59 @@ function bytes(hex: string): Uint8Array {
     out[(i - 2) / 2] = Number.parseInt(hex.slice(i, i + 2), 16);
   }
   return out;
+}
+
+function hexByteLength(hex: Hex32 | `0x${string}`): number {
+  return (hex.length - 2) / 2;
+}
+
+function u32Hex(value: number): string {
+  return value.toString(16).padStart(8, "0");
+}
+
+function u256Hex(value: bigint): string {
+  return value.toString(16).padStart(64, "0");
+}
+
+function strip0x(hex: `0x${string}`): string {
+  return hex.slice(2);
+}
+
+function buildCircleCctpV2Message(params?: {
+  amount?: bigint;
+  destinationCaller?: Hex32;
+  hookData?: `0x${string}`;
+}): `0x${string}` {
+  const nonce =
+    "0x1111111111111111111111111111111111111111111111111111111111111111" as Hex32;
+  const mintRecipient = stellarContractStrkeyToBytes32(forwarder);
+  const hookData =
+    params?.hookData ??
+    buildStellarForwarderHookData({
+      recipient: stellarRecipient,
+      payload: "0x1234",
+    });
+
+  return `0x${[
+    u32Hex(1),
+    u32Hex(sourceDomain),
+    u32Hex(CCTP_STELLAR_DOMAIN),
+    strip0x(nonce),
+    strip0x(evmAddressToBytes32(tokenMessenger)),
+    "bb".repeat(32),
+    strip0x(params?.destinationCaller ?? mintRecipient),
+    u32Hex(CCTP_FINALITY_THRESHOLDS.standard),
+    u32Hex(0),
+    u32Hex(1),
+    strip0x(evmAddressToBytes32(burnToken)),
+    strip0x(mintRecipient),
+    u256Hex(params?.amount ?? 10_000_000n),
+    strip0x(evmAddressToBytes32(escrowAddress)),
+    u256Hex(50_000n),
+    u256Hex(0n),
+    u256Hex(0n),
+    strip0x(hookData),
+  ].join("")}`;
 }
 
 describe("@nebula/cctp-client", () => {
@@ -96,6 +154,19 @@ describe("@nebula/cctp-client", () => {
     expect(Array.from(encoded.slice(32 + length))).toEqual([0x12, 0x34]);
   });
 
+  it("parses the CCTP Forwarder hook data layout", () => {
+    const hook = buildStellarForwarderHookData({
+      recipient: stellarRecipient,
+      payload: "0x1234",
+    });
+
+    expect(parseStellarForwarderHookData(hook)).toEqual({
+      version: 1,
+      recipient: stellarRecipient,
+      payload: "0x1234",
+    });
+  });
+
   it("builds a depositForBurnWithHook call that forwards minting through Stellar CCTP", () => {
     const call = createCctpBurnToStellarCall({
       tokenMessenger,
@@ -140,12 +211,86 @@ describe("@nebula/cctp-client", () => {
       destinationDomain: CCTP_STELLAR_DOMAIN,
       nonce:
         "0x1111111111111111111111111111111111111111111111111111111111111111",
+      message: "0x010203040506",
       messageHash:
         "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
       attestationHash:
         "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
       mintRecipient: stellarContractStrkeyToBytes32(forwarder),
     });
+  });
+
+  it("parses a Circle CCTP V2 message and enforces the Nebula settlement binding", () => {
+    const message = buildCircleCctpV2Message();
+    const parsed = parseCctpMessageV2(message);
+    const mintRecipient = stellarContractStrkeyToBytes32(forwarder);
+
+    expect(hexByteLength(message)).toBeGreaterThan(376);
+    expect(parsed.version).toBe(1);
+    expect(parsed.sourceDomain).toBe(sourceDomain);
+    expect(parsed.destinationDomain).toBe(CCTP_STELLAR_DOMAIN);
+    expect(parsed.destinationCaller).toBe(mintRecipient);
+    expect(parsed.burnMessage.burnToken).toBe(evmAddressToBytes32(burnToken));
+    expect(parsed.burnMessage.mintRecipient).toBe(mintRecipient);
+    expect(parsed.burnMessage.amount).toBe(10_000_000n);
+    expect(parsed.burnMessage.messageSender).toBe(
+      evmAddressToBytes32(escrowAddress)
+    );
+    expect(parseStellarForwarderHookData(parsed.burnMessage.hookData)).toMatchObject({
+      recipient: stellarRecipient,
+    });
+
+    expect(() =>
+      assertCctpMessageMatchesSettlement({
+        message,
+        expectedSourceDomain: sourceDomain,
+        expectedNonce: parsed.nonce,
+        expectedBurnToken: burnToken,
+        expectedAmount: 10_000_000n,
+        expectedMessageSender: escrowAddress,
+        expectedMintRecipient: mintRecipient,
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects CCTP messages with wrong amount, token, caller, or malformed hook", () => {
+    const valid = buildCircleCctpV2Message();
+    const parsed = parseCctpMessageV2(valid);
+    const mintRecipient = stellarContractStrkeyToBytes32(forwarder);
+    const base = {
+      message: valid,
+      expectedSourceDomain: sourceDomain,
+      expectedNonce: parsed.nonce,
+      expectedBurnToken: burnToken,
+      expectedAmount: 10_000_000n,
+      expectedMessageSender: escrowAddress,
+      expectedMintRecipient: mintRecipient,
+    };
+
+    expect(() =>
+      assertCctpMessageMatchesSettlement({ ...base, expectedAmount: 9_000_000n })
+    ).toThrow("amount mismatch");
+    expect(() =>
+      assertCctpMessageMatchesSettlement({
+        ...base,
+        expectedBurnToken: "0x4444444444444444444444444444444444444444",
+      })
+    ).toThrow("burn token mismatch");
+    expect(() =>
+      assertCctpMessageMatchesSettlement({
+        ...base,
+        message: buildCircleCctpV2Message({
+          destinationCaller:
+            "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        }),
+      })
+    ).toThrow("destination caller mismatch");
+    expect(() =>
+      assertCctpMessageMatchesSettlement({
+        ...base,
+        message: buildCircleCctpV2Message({ hookData: "0x" }),
+      })
+    ).toThrow("non-empty hook data");
   });
 
   it("rejects unsupported Stellar CCTP destination shapes", () => {

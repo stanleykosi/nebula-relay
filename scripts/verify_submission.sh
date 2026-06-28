@@ -122,9 +122,11 @@ function validateCctpSettlement(value, label) {
   assert(Number.isInteger(value.sourceDomain), `${label}.sourceDomain invalid`);
   assert(Number.isInteger(value.destinationDomain), `${label}.destinationDomain invalid`);
   assert(isHex(value.nonce, 32), `${label}.nonce invalid`);
+  assert(isHexBytes(value.message), `${label}.message invalid`);
   assert(isHex(value.messageHash, 32), `${label}.messageHash invalid`);
   assert(isHex(value.attestationHash, 32), `${label}.attestationHash invalid`);
   assert(isHex(value.mintRecipient, 32), `${label}.mintRecipient invalid`);
+  assertEqual(`${label}.messageHash`, hashHex(value.message), value.messageHash);
 }
 
 function validateProof(value) {

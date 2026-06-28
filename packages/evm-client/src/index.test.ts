@@ -36,6 +36,7 @@ const validWitness = fixture("valid-lock.json") as {
   tokenAddress: Address;
   complianceRoot: Hex;
   complianceMode: "allowlist-membership";
+  cctpSettlement: BuildLockWitnessConfig["cctpSettlement"];
   expected: BuildLockWitnessConfig["expected"];
 };
 

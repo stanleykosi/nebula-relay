@@ -69,6 +69,7 @@ pub struct CctpSettlement {
     pub source_domain: u32,
     pub destination_domain: u32,
     pub nonce: String,
+    pub message: String,
     pub message_hash: String,
     pub attestation_hash: String,
     pub mint_recipient: String,
@@ -238,6 +239,7 @@ pub fn validate_witness(witness: &LockWitness) -> Result<NebulaJournal, NebulaEr
     let cctp_message_hash = parse_hex_32(&witness.cctp_settlement.message_hash)?;
     let cctp_attestation_hash = parse_hex_32(&witness.cctp_settlement.attestation_hash)?;
     let cctp_mint_recipient = parse_hex_32(&witness.cctp_settlement.mint_recipient)?;
+    let cctp_message = parse_hex_bytes(&witness.cctp_settlement.message)?;
     if cctp_nonce == [0u8; 32]
         || cctp_message_hash == [0u8; 32]
         || cctp_attestation_hash == [0u8; 32]
@@ -245,6 +247,20 @@ pub fn validate_witness(witness: &LockWitness) -> Result<NebulaJournal, NebulaEr
     {
         return Err(NebulaError::Validation("zero CCTP settlement field"));
     }
+    let computed_cctp_message_hash: [u8; 32] = Sha256::digest(&cctp_message).into();
+    if computed_cctp_message_hash != cctp_message_hash {
+        return Err(NebulaError::Validation("CCTP message hash mismatch"));
+    }
+    validate_cctp_v2_message(
+        &cctp_message,
+        witness.cctp_settlement.source_domain,
+        witness.cctp_settlement.destination_domain,
+        &cctp_nonce,
+        &cctp_mint_recipient,
+        &parse_hex_20(&witness.token_address)?,
+        amount,
+        &parse_hex_20(&witness.escrow_contract)?,
+    )?;
 
     let claim_nullifier = claim_nullifier(witness)?;
     let event_commitment = event_commitment(witness, amount)?;
@@ -361,6 +377,99 @@ fn event_commitment(witness: &LockWitness, amount: u128) -> Result<[u8; 32], Neb
     Ok(h.finalize().into())
 }
 
+fn validate_cctp_v2_message(
+    message: &[u8],
+    expected_source_domain: u32,
+    expected_destination_domain: u32,
+    expected_nonce: &[u8; 32],
+    expected_mint_recipient: &[u8; 32],
+    expected_burn_token: &[u8; 20],
+    expected_amount: u128,
+    expected_message_sender: &[u8; 20],
+) -> Result<(), NebulaError> {
+    if message.len() <= 376 {
+        return Err(NebulaError::Validation("CCTP message missing hook data"));
+    }
+    let source_domain = read_u32_be(message, 4)?;
+    let destination_domain = read_u32_be(message, 8)?;
+    if source_domain != expected_source_domain {
+        return Err(NebulaError::Validation("CCTP message source domain mismatch"));
+    }
+    if destination_domain != expected_destination_domain {
+        return Err(NebulaError::Validation(
+            "CCTP message destination domain mismatch",
+        ));
+    }
+    if read_32(message, 12)? != *expected_nonce {
+        return Err(NebulaError::Validation("CCTP message nonce mismatch"));
+    }
+    if read_32(message, 108)? != *expected_mint_recipient {
+        return Err(NebulaError::Validation(
+            "CCTP message destination caller mismatch",
+        ));
+    }
+
+    let body = 148;
+    if read_32(message, body + 4)? != evm_address_as_bytes32(expected_burn_token) {
+        return Err(NebulaError::Validation("CCTP burn token mismatch"));
+    }
+    if read_32(message, body + 36)? != *expected_mint_recipient {
+        return Err(NebulaError::Validation("CCTP mint recipient mismatch"));
+    }
+    let amount = read_u256_as_u128(message, body + 68)?;
+    if amount != expected_amount {
+        return Err(NebulaError::Validation("CCTP amount mismatch"));
+    }
+    if read_32(message, body + 100)? != evm_address_as_bytes32(expected_message_sender) {
+        return Err(NebulaError::Validation("CCTP message sender mismatch"));
+    }
+    let max_fee = read_u256_as_u128(message, body + 132)?;
+    if max_fee >= amount {
+        return Err(NebulaError::Validation("CCTP max fee must be less than amount"));
+    }
+    if read_u32_be(message, 140)? == 0 {
+        return Err(NebulaError::Validation("CCTP min finality threshold is zero"));
+    }
+    Ok(())
+}
+
+fn evm_address_as_bytes32(address: &[u8; 20]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    out[12..].copy_from_slice(address);
+    out
+}
+
+fn read_u32_be(bytes: &[u8], offset: usize) -> Result<u32, NebulaError> {
+    let raw = read_n::<4>(bytes, offset)?;
+    Ok(u32::from_be_bytes(raw))
+}
+
+fn read_32(bytes: &[u8], offset: usize) -> Result<[u8; 32], NebulaError> {
+    read_n::<32>(bytes, offset)
+}
+
+fn read_u256_as_u128(bytes: &[u8], offset: usize) -> Result<u128, NebulaError> {
+    let raw = read_n::<32>(bytes, offset)?;
+    if raw[..16].iter().any(|byte| *byte != 0) {
+        return Err(NebulaError::Validation("CCTP uint256 exceeds u128"));
+    }
+    let mut out = [0u8; 16];
+    out.copy_from_slice(&raw[16..]);
+    Ok(u128::from_be_bytes(out))
+}
+
+fn read_n<const N: usize>(bytes: &[u8], offset: usize) -> Result<[u8; N], NebulaError> {
+    let end = offset
+        .checked_add(N)
+        .ok_or(NebulaError::Validation("CCTP offset overflow"))?;
+    if end > bytes.len() {
+        return Err(NebulaError::Validation("CCTP message too short"));
+    }
+    let mut out = [0u8; N];
+    out.copy_from_slice(&bytes[offset..end]);
+    Ok(out)
+}
+
 fn parse_u128_decimal(value: &str) -> Result<u128, NebulaError> {
     value
         .parse::<u128>()
@@ -397,6 +506,14 @@ fn parse_hex_32(value: &str) -> Result<[u8; 32], NebulaError> {
     Ok(out)
 }
 
+fn parse_hex_bytes(value: &str) -> Result<Vec<u8>, NebulaError> {
+    let raw = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+        .ok_or_else(|| NebulaError::Hex(value.to_owned()))?;
+    hex::decode(raw).map_err(|_| NebulaError::Hex(value.to_owned()))
+}
+
 fn parse_hex_exact(value: &str, len: usize) -> Result<Vec<u8>, NebulaError> {
     let raw = value
         .strip_prefix("0x")
@@ -431,7 +548,7 @@ mod tests {
         assert_eq!(journal.cctp_destination_domain, 27);
         assert_eq!(
             journal.cctp_message_hash,
-            "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89"
+            "0x428f0dc1a457bec99fe9a1e8d375a01d4fc7c6b0691cef934fbbbfe30c300b67"
         );
         assert_eq!(
             to_hex_32(&journal_digest(&encoded)),
@@ -450,6 +567,18 @@ mod tests {
             let witness = load_witness(fixture(name)).unwrap();
             assert!(validate_witness(&witness).is_err(), "{name} should fail");
         }
+    }
+
+    #[test]
+    fn cctp_message_binding_rejects_hash_and_amount_mismatches() {
+        let mut witness = load_witness(fixture("valid-lock.json")).unwrap();
+        witness.cctp_settlement.message_hash =
+            "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_owned();
+        assert!(validate_witness(&witness).is_err());
+
+        let mut witness = load_witness(fixture("valid-lock.json")).unwrap();
+        witness.amount = "90000000".to_owned();
+        assert!(validate_witness(&witness).is_err());
     }
 
     #[test]

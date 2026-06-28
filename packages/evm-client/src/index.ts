@@ -274,6 +274,7 @@ function normalizeCctpSettlement(
     sourceDomain: settlement.sourceDomain,
     destinationDomain: settlement.destinationDomain,
     nonce: normalizeHex32(settlement.nonce),
+    message: normalizeHexBytes(settlement.message),
     messageHash: normalizeHex32(settlement.messageHash),
     attestationHash: normalizeHex32(settlement.attestationHash),
     mintRecipient: normalizeHex32(settlement.mintRecipient),
@@ -297,6 +298,10 @@ function normalizeAddress(address: Address): Address {
 }
 
 function normalizeHex32(value: string): Hex {
+  return value.toLowerCase() as Hex;
+}
+
+function normalizeHexBytes(value: string): Hex {
   return value.toLowerCase() as Hex;
 }
 

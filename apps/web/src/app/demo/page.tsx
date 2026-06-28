@@ -7,9 +7,9 @@ export default function DemoPage() {
         <span className="eyebrow">Guided demo</span>
         <h1 className="page-title">Relay proof to private Stellar note</h1>
         <p className="lead">
-          Fixture mode completes locally. Live localnet/testnet calls can be
-          wired through the same EVM and Stellar client packages when contract
-          IDs and RPC endpoints are configured.
+          Testnet mode is configured for EVM wallet connection, Stellar wallet
+          connection, CCTP-backed settlement, and NebulaRelay claim submission
+          once contract IDs and RPC endpoints are attached.
         </p>
       </section>
       <DemoConsole />

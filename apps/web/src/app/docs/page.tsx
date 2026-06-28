@@ -15,8 +15,8 @@ export default function DocsPage() {
       <p className="lead">
         Nebula is relay-first: it proves source-chain lock intent and
         compliance fields, binds a CCTP settlement transcript, then gates a
-        Stellar private-note-compatible claim. The UI still runs fixture/dev
-        mode by default.
+        Stellar private-note-compatible claim. The hosted UI defaults to
+        testnet-oriented mode.
       </p>
       <ModeStrip config={demoConfig} />
 
@@ -63,9 +63,9 @@ export default function DocsPage() {
             <Badge tone="warn">Simulated claim UI</Badge>
           </div>
           <p>
-            The UI can complete without RPC. It labels fixture/dev proof mode
-            and does not claim a live Stellar transaction unless configured
-            outside this shell.
+            The UI can still complete with local fallback data for smoke tests.
+            It does not claim a live Stellar transaction unless contract IDs,
+            RPC endpoints, and signer flow are configured.
           </p>
           <HashRow label="Fixture tx" value={validLockWitness.txHash} />
         </Panel>

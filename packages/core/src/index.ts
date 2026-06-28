@@ -19,6 +19,7 @@ export const CctpSettlementSchema = z.object({
   sourceDomain: Uint32Schema,
   destinationDomain: Uint32Schema,
   nonce: Hex32Schema,
+  message: HexBytesSchema,
   messageHash: Hex32Schema,
   attestationHash: Hex32Schema,
   mintRecipient: Hex32Schema,

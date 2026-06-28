@@ -134,7 +134,9 @@ export function DemoConsole() {
   return (
     <div className="page">
       <div className="status-row">
-        <Badge tone="info">Fixture mode</Badge>
+        <Badge tone="info">
+          {demoConfig.demoMode === "live" ? "Testnet mode" : "Fixture mode"}
+        </Badge>
         <Badge tone={demoConfig.verifierMode === "mock" ? "warn" : "ok"}>
           Verifier: {demoConfig.verifierMode}
         </Badge>
@@ -153,7 +155,9 @@ export function DemoConsole() {
             </p>
             <div className="status-row">
               <Badge tone="ok">{progress}% complete</Badge>
-              <Badge tone="warn">Dev proof artifact</Badge>
+              <Badge tone={demoConfig.proofMode === "dev" ? "warn" : "ok"}>
+                Proof: {demoConfig.proofMode}
+              </Badge>
             </div>
             <div className="actions">
               <ActionButton
@@ -206,8 +210,8 @@ export function DemoConsole() {
 
         <Panel title="2. Recipient note" className="span-6">
           <p>
-            Fixture mode uses the note commitment already bound into the dev
-            proof artifact.
+            Testnet mode uses the recipient note commitment bound into the
+            configured proof artifact.
           </p>
           <div className="actions">
             <ActionButton
@@ -262,8 +266,8 @@ export function DemoConsole() {
 
         <Panel title="5. ZK proof" className="span-7">
           <p>
-            This local artifact is dev mode. Groth16 and remote modes remain
-            available as explicit future proof modes.
+            This deployment is configured for the selected proof mode. Local
+            fixture artifacts remain available only for smoke tests.
           </p>
           <div className="actions">
             <ActionButton
@@ -302,8 +306,8 @@ export function DemoConsole() {
 
         <Panel title="6. CCTP settlement" className="span-5">
           <p>
-            Fixture mode binds the Circle message and attestation hashes into
-            the same journal the Stellar contract verifies before claim storage.
+            The Circle message and attestation hashes are bound into the same
+            journal the Stellar contract verifies before claim storage.
           </p>
           <div className="actions">
             <ActionButton
@@ -319,9 +323,8 @@ export function DemoConsole() {
 
         <Panel title="7. Stellar verification" className="span-5">
           <p>
-            Fixture mode simulates the claim state locally. The Stellar client
-            package builds, simulates, signs, and submits the real claim call
-            when RPC and contract IDs are configured.
+            The Stellar client package builds, simulates, signs, and submits the
+            real claim call when RPC and contract IDs are configured.
           </p>
           <div className="actions">
             <ActionButton
@@ -399,7 +402,8 @@ export function DemoConsole() {
         <Panel title="10. Auditor packet" className="span-12">
           <p>
             User-exported disclosure packet with schema fields, verification
-            steps, and caveats for dev proofs, fixture data, and Mode A handoff.
+            steps, proof-mode caveats, testnet settlement details, and Mode A
+            handoff.
           </p>
           <div className="actions">
             <ActionButton

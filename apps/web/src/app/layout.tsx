@@ -33,8 +33,8 @@ export default function RootLayout({
             </header>
             {children}
             <footer className="footer">
-              Relay-first MVP. Dev proof and fixture paths are labeled wherever
-              they appear.
+              Relay-first testnet UI. Local fixture fallbacks are labeled
+              wherever they appear.
             </footer>
           </div>
         </Providers>
