@@ -24,6 +24,7 @@ export type DemoStepId =
   | "lock"
   | "witness"
   | "proof"
+  | "cctp"
   | "claim"
   | "nullifier"
   | "replay"
@@ -44,6 +45,10 @@ export interface DemoState {
   lockTxHash?: string;
   witness?: LockWitness;
   proof?: ProofArtifact;
+  cctpMessage?: string;
+  cctpAttestation?: string;
+  cctpMessageHash?: string;
+  cctpMintTxHash?: string;
   claimTxHash?: string;
   nullifierStored: boolean;
   replayFailure?: string;
@@ -83,6 +88,11 @@ export const demoSteps: DemoStep[] = [
     id: "proof",
     title: "Generate proof artifact",
     caption: "Dev fixture binds seal, image ID, journal, and digest.",
+  },
+  {
+    id: "cctp",
+    title: "Settle CCTP USDC",
+    caption: "Burn, attestation, and Stellar mint are bound into the proof.",
   },
   {
     id: "claim",
@@ -180,12 +190,14 @@ export function buildFixtureWitness(state: DemoState): DemoState {
     sourceReceiptRoot: validLockWitness.sourceReceiptRoot as HexString,
     complianceRoot: validLockWitness.complianceRoot as HexString,
     complianceMode: validLockWitness.complianceMode,
+    cctpSettlement: validLockWitness.cctpSettlement,
     expected: {
       ...validLockWitness.expected,
       escrowContract: validLockWitness.expected.escrowContract as HexString,
       tokenAddress: validLockWitness.expected.tokenAddress as HexString,
       complianceRoot: validLockWitness.expected.complianceRoot as HexString,
       networkDomain: validLockWitness.expected.networkDomain as HexString,
+      cctpMintRecipient: validLockWitness.expected.cctpMintRecipient as HexString,
     },
   });
   return completeStep(
@@ -204,6 +216,20 @@ export function generateFixtureProof(state: DemoState): DemoState {
       proof: ProofArtifactSchema.parse(devProofArtifact),
     },
     "proof"
+  );
+}
+
+export function settleFixtureCctp(state: DemoState): DemoState {
+  return completeStep(
+    {
+      ...state,
+      cctpMessage: "0x010203040506",
+      cctpAttestation: "0x0a0b0c0d",
+      cctpMessageHash: validLockWitness.cctpSettlement.messageHash,
+      cctpMintTxHash:
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    },
+    "cctp"
   );
 }
 
@@ -280,6 +306,7 @@ export function runFullFixtureDemo(): DemoState {
     lockFixtureUsdc,
     buildFixtureWitness,
     generateFixtureProof,
+    settleFixtureCctp,
     claimFixtureOnStellar,
     showNullifierStored,
     runReplayFailure,

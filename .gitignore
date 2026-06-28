@@ -25,6 +25,8 @@ cache/
 *.pem
 
 # Proof artifacts / private witnesses
+artifacts/*.sol/
+artifacts/build-info/
 artifacts/private/
 artifacts/**/*.secret.json
 fixtures/**/*.secret.json

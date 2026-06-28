@@ -4,19 +4,22 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env,
 };
 
+mod cctp_forwarder;
 mod pool_adapter;
 #[cfg(test)]
 mod test;
 mod verifier_router;
 
+use cctp_forwarder::CctpForwarderClient;
 use pool_adapter::NebulaPoolAdapterClient;
 use verifier_router::RiscZeroVerifierRouterClient;
 
-const JOURNAL_LEN: u32 = 289;
+const JOURNAL_LEN: u32 = 425;
 const MAX_COMPLIANCE_MODE: u32 = 2;
 #[cfg(feature = "dev-mock-verifier")]
 const DEV_SEAL_PREFIX: &[u8; 18] = b"NEBULA_DEV_SEAL_V1";
 const DEMO_DESTINATION_CHAIN_ID: u64 = 1_501;
+const CCTP_STELLAR_DOMAIN: u32 = 27;
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -41,6 +44,8 @@ pub enum Error {
     WrongDestination = 17,
     VerifierRouterFailed = 18,
     InvalidConfig = 19,
+    CctpSettlementFailed = 20,
+    InvalidCctpSettlement = 21,
 }
 
 #[contracttype]
@@ -65,6 +70,7 @@ pub struct ClaimReceipt {
     pub note_commitment: BytesN<32>,
     pub amount: i128,
     pub event_commitment: BytesN<32>,
+    pub cctp_message_hash: BytesN<32>,
 }
 
 #[contracttype]
@@ -76,6 +82,8 @@ pub struct ClaimRecord {
     pub token: BytesN<20>,
     pub source_chain_id: u64,
     pub event_commitment: BytesN<32>,
+    pub cctp_message_hash: BytesN<32>,
+    pub cctp_attestation_hash: BytesN<32>,
 }
 
 #[contracttype]
@@ -97,6 +105,12 @@ pub struct NebulaJournalV1 {
     pub event_commitment: BytesN<32>,
     pub destination_chain_id: u64,
     pub expires_at_ledger: u32,
+    pub cctp_source_domain: u32,
+    pub cctp_destination_domain: u32,
+    pub cctp_nonce: BytesN<32>,
+    pub cctp_message_hash: BytesN<32>,
+    pub cctp_attestation_hash: BytesN<32>,
+    pub cctp_mint_recipient: BytesN<32>,
 }
 
 #[contracttype]
@@ -105,6 +119,8 @@ enum DataKey {
     Admin,
     VerifierRouter,
     PoolAdapter,
+    CctpForwarder,
+    CctpMintRecipient,
     AcceptedImageId,
     Asset,
     NetworkDomain,
@@ -127,6 +143,8 @@ impl NebulaRelay {
         admin: Address,
         verifier_router: Address,
         pool_adapter: Address,
+        cctp_forwarder: Address,
+        cctp_mint_recipient: BytesN<32>,
         accepted_image_id: BytesN<32>,
         asset: Address,
         network_domain: BytesN<32>,
@@ -140,6 +158,9 @@ impl NebulaRelay {
         if is_zero_bytes(&env, &network_domain) {
             return Err(Error::InvalidDomain);
         }
+        if is_zero_bytes(&env, &cctp_mint_recipient) {
+            return Err(Error::InvalidCctpSettlement);
+        }
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
@@ -147,6 +168,12 @@ impl NebulaRelay {
         env.storage()
             .instance()
             .set(&DataKey::PoolAdapter, &pool_adapter);
+        env.storage()
+            .instance()
+            .set(&DataKey::CctpForwarder, &cctp_forwarder);
+        env.storage()
+            .instance()
+            .set(&DataKey::CctpMintRecipient, &cctp_mint_recipient);
         env.storage()
             .instance()
             .set(&DataKey::AcceptedImageId, &accepted_image_id);
@@ -224,6 +251,8 @@ impl NebulaRelay {
         seal: Bytes,
         image_id: BytesN<32>,
         journal: Bytes,
+        cctp_message: Bytes,
+        cctp_attestation: Bytes,
         pool_payload: Bytes,
     ) -> Result<ClaimReceipt, Error> {
         claimant.require_auth();
@@ -239,6 +268,7 @@ impl NebulaRelay {
             return Err(Error::NullifierAlreadyClaimed);
         }
 
+        settle_cctp(&env, &decoded, &cctp_message, &cctp_attestation)?;
         handoff_private_note(&env, &claimant, &decoded, &pool_payload)?;
 
         let record = ClaimRecord {
@@ -248,6 +278,8 @@ impl NebulaRelay {
             token: decoded.token.clone(),
             source_chain_id: decoded.source_chain_id,
             event_commitment: decoded.event_commitment.clone(),
+            cctp_message_hash: decoded.cctp_message_hash.clone(),
+            cctp_attestation_hash: decoded.cctp_attestation_hash.clone(),
         };
         env.storage()
             .persistent()
@@ -265,6 +297,7 @@ impl NebulaRelay {
             note_commitment: decoded.stellar_note_commitment,
             amount: decoded.amount,
             event_commitment: decoded.event_commitment,
+            cctp_message_hash: decoded.cctp_message_hash,
         })
     }
 
@@ -406,8 +439,23 @@ fn validate_journal(env: &Env, journal: &NebulaJournalV1) -> Result<(), Error> {
         || is_zero_bytes(env, &journal.stellar_note_commitment)
         || is_zero_bytes(env, &journal.claim_nullifier)
         || is_zero_bytes(env, &journal.event_commitment)
+        || is_zero_bytes(env, &journal.cctp_nonce)
+        || is_zero_bytes(env, &journal.cctp_message_hash)
+        || is_zero_bytes(env, &journal.cctp_attestation_hash)
+        || is_zero_bytes(env, &journal.cctp_mint_recipient)
     {
         return Err(Error::InvalidJournal);
+    }
+    if journal.cctp_destination_domain != CCTP_STELLAR_DOMAIN {
+        return Err(Error::InvalidCctpSettlement);
+    }
+    let expected_mint_recipient: BytesN<32> = env
+        .storage()
+        .instance()
+        .get(&DataKey::CctpMintRecipient)
+        .ok_or(Error::NotInitialized)?;
+    if journal.cctp_mint_recipient != expected_mint_recipient {
+        return Err(Error::InvalidCctpSettlement);
     }
     if journal.amount <= 0 {
         return Err(Error::AmountOutOfBounds);
@@ -463,6 +511,36 @@ fn validate_journal(env: &Env, journal: &NebulaJournalV1) -> Result<(), Error> {
     if journal.expires_at_ledger < env.ledger().sequence() {
         return Err(Error::ReceiptRootExpired);
     }
+    Ok(())
+}
+
+fn settle_cctp(
+    env: &Env,
+    journal: &NebulaJournalV1,
+    cctp_message: &Bytes,
+    cctp_attestation: &Bytes,
+) -> Result<(), Error> {
+    if cctp_message.len() == 0 || cctp_attestation.len() == 0 {
+        return Err(Error::InvalidCctpSettlement);
+    }
+    let message_hash: BytesN<32> = env.crypto().sha256(cctp_message).into();
+    let attestation_hash: BytesN<32> = env.crypto().sha256(cctp_attestation).into();
+    if message_hash != journal.cctp_message_hash
+        || attestation_hash != journal.cctp_attestation_hash
+    {
+        return Err(Error::InvalidCctpSettlement);
+    }
+
+    let forwarder_address: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::CctpForwarder)
+        .ok_or(Error::NotInitialized)?;
+    let forwarder = CctpForwarderClient::new(env, &forwarder_address);
+    forwarder
+        .try_mint_and_forward(cctp_message, cctp_attestation)
+        .map_err(|_| Error::CctpSettlementFailed)?
+        .map_err(|_| Error::CctpSettlementFailed)?;
     Ok(())
 }
 
@@ -529,6 +607,12 @@ fn decode_journal(_env: &Env, journal: &Bytes) -> Result<NebulaJournalV1, Error>
         event_commitment: read_n(journal, 245)?,
         destination_chain_id: read_u64(journal, 277)?,
         expires_at_ledger: read_u32(journal, 285)?,
+        cctp_source_domain: read_u32(journal, 289)?,
+        cctp_destination_domain: read_u32(journal, 293)?,
+        cctp_nonce: read_n(journal, 297)?,
+        cctp_message_hash: read_n(journal, 329)?,
+        cctp_attestation_hash: read_n(journal, 361)?,
+        cctp_mint_recipient: read_n(journal, 393)?,
     })
 }
 

@@ -20,6 +20,8 @@ export const nebulaRelayErrorNames = {
   17: "WrongDestination",
   18: "VerifierRouterFailed",
   19: "InvalidConfig",
+  20: "CctpSettlementFailed",
+  21: "InvalidCctpSettlement",
 } as const;
 
 export type NebulaRelayErrorCode = keyof typeof nebulaRelayErrorNames;
@@ -30,6 +32,8 @@ export interface ClaimArgs {
   seal: Hex;
   imageId: Hex;
   journal: Hex;
+  cctpMessage: Hex;
+  cctpAttestation: Hex;
   poolPayload: Hex;
 }
 
@@ -158,6 +162,8 @@ export function claimArgsToScVals(claim: ClaimArgs): StellarSdk.xdr.ScVal[] {
     bytesScVal(claim.seal),
     bytesScVal(claim.imageId),
     bytesScVal(claim.journal),
+    bytesScVal(claim.cctpMessage),
+    bytesScVal(claim.cctpAttestation),
     bytesScVal(claim.poolPayload),
   ];
 }

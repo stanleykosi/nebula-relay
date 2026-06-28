@@ -50,6 +50,16 @@ describe("Nebula schemas", () => {
         "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       destinationChainId: 1501,
       expiresAtLedger: 999999,
+      cctpSourceDomain: 0,
+      cctpDestinationDomain: 27,
+      cctpNonce:
+        "0x1111111111111111111111111111111111111111111111111111111111111111",
+      cctpMessageHash:
+        "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
+      cctpAttestationHash:
+        "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+      cctpMintRecipient:
+        "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     };
     expect(() => NebulaJournalSchema.parse(journal)).not.toThrow();
     expect(() =>
@@ -88,6 +98,12 @@ describe("Nebula schemas", () => {
           "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
         journalDigest:
           "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        cctpMessageHash:
+          "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
+        cctpAttestationHash:
+          "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+        cctpNonce:
+          "0x1111111111111111111111111111111111111111111111111111111111111111",
         disclosureMode: "user-exported",
         caveats: ["dev-mode artifact"],
         verificationInstructions: [

@@ -1,0 +1,21 @@
+{
+  "name": "@nebula/cctp-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "node ../../node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/bin/tsc -p tsconfig.json",
+    "lint": "node ../../node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "typecheck": "node ../../node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "test": "node ../../node_modules/.pnpm/vitest@4.0.16/node_modules/vitest/vitest.mjs run src"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^16.0.1",
+    "viem": "^2.53.1"
+  },
+  "devDependencies": {
+    "vitest": "4.0.16"
+  }
+}

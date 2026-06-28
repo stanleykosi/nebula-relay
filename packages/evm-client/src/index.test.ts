@@ -45,6 +45,7 @@ const witnessConfig: BuildLockWitnessConfig = {
   sourceReceiptRoot: validWitness.sourceReceiptRoot,
   complianceRoot: validWitness.complianceRoot,
   complianceMode: validWitness.complianceMode,
+  cctpSettlement: validWitness.cctpSettlement,
   expected: validWitness.expected,
 };
 

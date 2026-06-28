@@ -7,10 +7,10 @@ Compliance-forward proof-gated relay prototype for private Stellar-side claims, 
 Nebula Relay is a hackathon MVP that proves an approved EVM stablecoin lock happened, then lets a Stellar contract accept a private-note-compatible claim only after proof verification and policy checks pass.
 
 ```text
-EVM lock event -> LockWitness -> RISC Zero journal/proof artifact -> Stellar NebulaRelay claim -> private-note-compatible handoff
+EVM lock event + CCTP burn/message -> LockWitness -> RISC Zero journal/proof artifact -> Stellar CCTP settlement -> NebulaRelay claim -> private-note-compatible handoff
 ```
 
-The current demo is deterministic fixture/dev mode. It is useful for judging the complete vertical slice, but it is not production bridge infrastructure.
+The current demo is deterministic fixture/dev mode. The local vertical slice now binds CCTP message, attestation, nonce, and mint-recipient fields into the proof journal and requires the Stellar claim path to settle through the configured CCTP Forwarder before storing the nullifier. It is bridge-shaped and testable locally, but it is not an audited live bridge deployment.
 
 ## Why It Matters For Stellar Real-World ZK
 
@@ -23,6 +23,7 @@ The implemented RISC Zero guest/host path validates a structured `LockWitness` a
 - The source lock witness matches the configured source chain, escrow, token, amount bounds, compliance root, and destination.
 - The Stellar note commitment is nonzero and becomes the public private-note-compatible output.
 - The claim nullifier and event commitment are derived into the public journal.
+- CCTP source domain, Stellar destination domain, message hash, attestation hash, nonce, and mint recipient are bound into the same journal.
 - Bad token, wrong escrow, bad compliance, wrong destination, malformed public outputs, wrong image ID, bad seal, wrong journal digest, and replay fixtures fail in tests.
 
 Current proof caveat: the local artifact is `dev` mode. Real Groth16 proof generation and a deployed Nethermind Stellar RISC Zero verifier router are documented production-path work.
@@ -37,6 +38,7 @@ The core state transition is the `NebulaRelay` Soroban contract. It:
 - Calls a verifier-router-compatible `verify(seal, image_id, journal_digest)` path.
 - Decodes and validates the Nebula journal.
 - Checks registered source config and compliance root config.
+- Checks CCTP settlement fields and calls the configured `mint_and_forward(message, attestation)` adapter before claim storage.
 - Stores the nullifier to prevent replay.
 - Calls a Nebula-owned pool-adapter handoff boundary.
 - Stores claim and note records readable with `get_claim` and `get_note`.
@@ -50,6 +52,7 @@ Original Nebula work includes:
 - Shared schemas for `LockWitness`, `NebulaJournal`, `ProofArtifact`, and `AuditorPacket`.
 - RISC Zero guest/host dev proof path.
 - Stellar `NebulaRelay` contract, verifier-router ABI shim, pool-adapter boundary, and tests.
+- CCTP client helpers for EVM `depositForBurnWithHook`, Circle Iris attestation polling, Stellar `mint_and_forward` transaction construction, and proof-friendly settlement binding.
 - Next.js demo UX, fixture flow, failure lab, auditor export, and scripts.
 
 Reused/reference material is documented in [docs/reused-code.md](docs/reused-code.md). The main references are Nethermind `stellar-risc0-verifier`, Nethermind `stellar-private-payments`, OpenZeppelin Stellar contracts, and Stellar documentation snapshots. No upstream UI was copied.
@@ -61,7 +64,7 @@ Reused/reference material is documented in [docs/reused-code.md](docs/reused-cod
 - The old dev mock verifier remains only behind the `dev-mock-verifier` feature and explicit admin toggle.
 - Source-chain receipt trie inclusion and finality are not implemented.
 - Private Payments composition is Mode A handoff: Nebula records a private-note-compatible commitment through an adapter boundary. It does not directly credit the upstream pool.
-- User-funded Stellar deposits are not a complete value bridge. Real bridge settlement needs CCTP-style canonical settlement, liquidity, treasury funding, or a relayer/market-maker model.
+- CCTP settlement is proof-bound and enforced in deterministic local tests, but no live testnet CCTP burn/mint transcript has been submitted from this workspace.
 
 ## Exact Demo Commands
 
@@ -91,6 +94,13 @@ cargo test --workspace
 stellar contract build
 ```
 
+Run the CCTP settlement package:
+
+```bash
+pnpm --filter @nebula/cctp-client test
+pnpm --filter @nebula/cctp-client typecheck
+```
+
 Generate the current dev proof artifact:
 
 ```bash
@@ -115,6 +125,9 @@ No live testnet contracts are deployed from this workspace yet. The final demo u
 | Stellar fixture | NebulaRelay | Not deployed; contract tested locally and WASM builds |
 | Stellar fixture | RISC Zero verifier router | Router-compatible harness in tests |
 | Stellar fixture | Pool adapter / handoff wrapper | Harness in tests; Mode A adapter ABI in contract |
+| Stellar testnet | Circle CCTP Forwarder | `CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ` |
+| Stellar testnet | Circle CCTP Message Transmitter | `CBJ6MTCKKZG73PMDZCJMSFRD7DQEMI4FKDH7CGDSV4W6FHCRBCQAVVJY` |
+| Stellar testnet | Circle CCTP Token Messenger Minter | `CDNG7HXAPBWICI2E3AUBP3YZWZELJLYSB6F5CC7WLDTLTHVM74SLRTHP` |
 | Stellar testnet | NebulaRelay | Not deployed |
 | Stellar testnet | RISC Zero verifier router | Not configured |
 | Stellar testnet | Pool adapter / handoff wrapper | Not deployed |
@@ -132,8 +145,8 @@ Recorded video and screenshots are not checked into this repo from the terminal 
 
 ## Security Limitations
 
-This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Real Groth16 verification, receipt-root/finality infrastructure, direct private-pool credit, governance hardening, legal review, regulatory review, and security audits are required before production deployment.
+This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Real Groth16 verification, live CCTP testnet/mainnet validation, direct private-pool credit, governance hardening, legal review, regulatory review, and security audits are required before production deployment.
 
 ## Production Path
 
-The production path replaces fixture/dev inputs with audited proof generation, deployed verifier-router verification, robust source-chain finality, audited Private Payments composition, operator governance, monitoring, and a regulated settlement path such as CCTP-backed test USDC first and reviewed production USDC later.
+The production path replaces fixture/dev inputs with audited proof generation, deployed verifier-router verification, a CCTP-backed USDC claim settlement path, audited Private Payments composition, operator governance, monitoring, and legal/regulatory review. The Stage 17 CCTP work builds the intended burn -> Circle Iris attestation -> Stellar `mint_and_forward` flow and binds that settlement transcript into the proof journal locally, but live production still requires testnet deployment, audits, monitoring, and launch gates.

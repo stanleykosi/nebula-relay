@@ -51,6 +51,9 @@ pub struct ExpectedConfig {
     pub destination_chain_id: u64,
     pub network_domain: String,
     pub expires_at_ledger: u32,
+    pub cctp_source_domain: u32,
+    pub cctp_destination_domain: u32,
+    pub cctp_mint_recipient: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +61,17 @@ pub struct ExpectedConfig {
 pub struct ComplianceWitness {
     pub valid: bool,
     pub mode: ComplianceMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CctpSettlement {
+    pub source_domain: u32,
+    pub destination_domain: u32,
+    pub nonce: String,
+    pub message_hash: String,
+    pub attestation_hash: String,
+    pub mint_recipient: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +93,7 @@ pub struct LockWitness {
     pub compliance_root: String,
     pub compliance_mode: ComplianceMode,
     pub destination_chain_id: u64,
+    pub cctp_settlement: CctpSettlement,
     pub expected: ExpectedConfig,
     pub compliance_witness: ComplianceWitness,
 }
@@ -102,6 +117,12 @@ pub struct NebulaJournal {
     pub event_commitment: String,
     pub destination_chain_id: u64,
     pub expires_at_ledger: u32,
+    pub cctp_source_domain: u32,
+    pub cctp_destination_domain: u32,
+    pub cctp_nonce: String,
+    pub cctp_message_hash: String,
+    pub cctp_attestation_hash: String,
+    pub cctp_mint_recipient: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -177,6 +198,18 @@ pub fn validate_witness(witness: &LockWitness) -> Result<NebulaJournal, NebulaEr
     if witness.destination_chain_id != witness.expected.destination_chain_id {
         return Err(NebulaError::Validation("wrong destination"));
     }
+    if witness.cctp_settlement.source_domain != witness.expected.cctp_source_domain {
+        return Err(NebulaError::Validation("wrong CCTP source domain"));
+    }
+    if witness.cctp_settlement.destination_domain != witness.expected.cctp_destination_domain {
+        return Err(NebulaError::Validation("wrong CCTP destination domain"));
+    }
+    if !hex_eq(
+        &witness.cctp_settlement.mint_recipient,
+        &witness.expected.cctp_mint_recipient,
+    ) {
+        return Err(NebulaError::Validation("wrong CCTP mint recipient"));
+    }
     if !hex_eq(&witness.compliance_root, &witness.expected.compliance_root) {
         return Err(NebulaError::Validation("wrong compliance root"));
     }
@@ -201,6 +234,17 @@ pub fn validate_witness(witness: &LockWitness) -> Result<NebulaJournal, NebulaEr
     if note == [0u8; 32] {
         return Err(NebulaError::Validation("zero note commitment"));
     }
+    let cctp_nonce = parse_hex_32(&witness.cctp_settlement.nonce)?;
+    let cctp_message_hash = parse_hex_32(&witness.cctp_settlement.message_hash)?;
+    let cctp_attestation_hash = parse_hex_32(&witness.cctp_settlement.attestation_hash)?;
+    let cctp_mint_recipient = parse_hex_32(&witness.cctp_settlement.mint_recipient)?;
+    if cctp_nonce == [0u8; 32]
+        || cctp_message_hash == [0u8; 32]
+        || cctp_attestation_hash == [0u8; 32]
+        || cctp_mint_recipient == [0u8; 32]
+    {
+        return Err(NebulaError::Validation("zero CCTP settlement field"));
+    }
 
     let claim_nullifier = claim_nullifier(witness)?;
     let event_commitment = event_commitment(witness, amount)?;
@@ -224,12 +268,18 @@ pub fn validate_witness(witness: &LockWitness) -> Result<NebulaJournal, NebulaEr
         event_commitment: to_hex_32(&event_commitment),
         destination_chain_id: witness.destination_chain_id,
         expires_at_ledger: witness.expected.expires_at_ledger,
+        cctp_source_domain: witness.cctp_settlement.source_domain,
+        cctp_destination_domain: witness.cctp_settlement.destination_domain,
+        cctp_nonce: to_hex_32(&cctp_nonce),
+        cctp_message_hash: to_hex_32(&cctp_message_hash),
+        cctp_attestation_hash: to_hex_32(&cctp_attestation_hash),
+        cctp_mint_recipient: to_hex_32(&cctp_mint_recipient),
     })
 }
 
 pub fn encode_journal(journal: &NebulaJournal) -> Result<Vec<u8>, NebulaError> {
     let amount = parse_u128_decimal(&journal.amount)?;
-    let mut out = Vec::with_capacity(289);
+    let mut out = Vec::with_capacity(425);
     out.extend_from_slice(&journal.version.to_be_bytes());
     out.extend_from_slice(&parse_hex_32(&journal.domain)?);
     out.extend_from_slice(&journal.source_chain_id.to_be_bytes());
@@ -246,6 +296,12 @@ pub fn encode_journal(journal: &NebulaJournal) -> Result<Vec<u8>, NebulaError> {
     out.extend_from_slice(&parse_hex_32(&journal.event_commitment)?);
     out.extend_from_slice(&journal.destination_chain_id.to_be_bytes());
     out.extend_from_slice(&journal.expires_at_ledger.to_be_bytes());
+    out.extend_from_slice(&journal.cctp_source_domain.to_be_bytes());
+    out.extend_from_slice(&journal.cctp_destination_domain.to_be_bytes());
+    out.extend_from_slice(&parse_hex_32(&journal.cctp_nonce)?);
+    out.extend_from_slice(&parse_hex_32(&journal.cctp_message_hash)?);
+    out.extend_from_slice(&parse_hex_32(&journal.cctp_attestation_hash)?);
+    out.extend_from_slice(&parse_hex_32(&journal.cctp_mint_recipient)?);
     Ok(out)
 }
 
@@ -284,6 +340,8 @@ fn claim_nullifier(witness: &LockWitness) -> Result<[u8; 32], NebulaError> {
     h.update(witness.log_index.to_be_bytes());
     h.update(parse_hex_20(&witness.escrow_contract)?);
     h.update(parse_hex_32(&witness.stellar_note_commitment)?);
+    h.update(parse_hex_32(&witness.cctp_settlement.message_hash)?);
+    h.update(parse_hex_32(&witness.cctp_settlement.nonce)?);
     Ok(h.finalize().into())
 }
 
@@ -299,6 +357,7 @@ fn event_commitment(witness: &LockWitness, amount: u128) -> Result<[u8; 32], Neb
     h.update(parse_hex_20(&witness.token_address)?);
     h.update(amount.to_be_bytes());
     h.update(parse_hex_32(&witness.stellar_note_commitment)?);
+    h.update(parse_hex_32(&witness.cctp_settlement.message_hash)?);
     Ok(h.finalize().into())
 }
 
@@ -363,12 +422,17 @@ mod tests {
         let witness = load_witness(fixture("valid-lock.json")).unwrap();
         let journal = validate_witness(&witness).unwrap();
         let encoded = encode_journal(&journal).unwrap();
-        assert_eq!(encoded.len(), 289);
+        assert_eq!(encoded.len(), 425);
         assert_eq!(
             journal.domain,
             "0x4e4542554c415f5354454c4c41525f544553544e45545f563100000000000000"
         );
         assert_eq!(journal.amount_bucket, 100);
+        assert_eq!(journal.cctp_destination_domain, 27);
+        assert_eq!(
+            journal.cctp_message_hash,
+            "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89"
+        );
         assert_eq!(
             to_hex_32(&journal_digest(&encoded)),
             to_hex_32(&journal_digest(&encoded))

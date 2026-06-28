@@ -33,6 +33,7 @@ import {
   runReplayFailure,
   showNullifierStored,
   showPrivateNoteHandoff,
+  settleFixtureCctp,
   type DemoState,
 } from "@/lib/demo";
 import { devProofArtifact, validLockWitness } from "@/lib/fixtures";
@@ -292,10 +293,31 @@ export function DemoConsole() {
               label="Compliance root"
               value={state.proof?.publicOutputs.complianceRoot}
             />
+            <HashRow
+              label="CCTP message"
+              value={state.proof?.publicOutputs.cctpMessageHash}
+            />
           </div>
         </Panel>
 
-        <Panel title="6. Stellar verification" className="span-5">
+        <Panel title="6. CCTP settlement" className="span-5">
+          <p>
+            Fixture mode binds the Circle message and attestation hashes into
+            the same journal the Stellar contract verifies before claim storage.
+          </p>
+          <div className="actions">
+            <ActionButton
+              onClick={() => setState((current) => settleFixtureCctp(current))}
+              disabled={!state.proof}
+            >
+              <RadioTower size={16} /> Settle CCTP
+            </ActionButton>
+          </div>
+          <HashRow label="Message hash" value={state.cctpMessageHash} />
+          <HashRow label="Mint tx" value={state.cctpMintTxHash} />
+        </Panel>
+
+        <Panel title="7. Stellar verification" className="span-5">
           <p>
             Fixture mode simulates the claim state locally. The Stellar client
             package builds, simulates, signs, and submits the real claim call
@@ -305,7 +327,7 @@ export function DemoConsole() {
             <ActionButton
               variant="primary"
               onClick={() => setState((current) => claimFixtureOnStellar(current))}
-              disabled={!state.proof}
+              disabled={!state.cctpMessageHash}
             >
               <RadioTower size={16} /> Claim on Stellar
             </ActionButton>
@@ -327,7 +349,7 @@ export function DemoConsole() {
           />
         </Panel>
 
-        <Panel title="7. Failure checks" className="span-6">
+        <Panel title="8. Failure checks" className="span-6">
           <p>Replay and invalid-token failures are deterministic fixtures.</p>
           <div className="actions">
             <ActionButton
@@ -353,7 +375,7 @@ export function DemoConsole() {
           ) : null}
         </Panel>
 
-        <Panel title="8. Private note / pool handoff" className="span-6">
+        <Panel title="9. Private note / pool handoff" className="span-6">
           <p>
             Stage 8 implements Mode A: note registry and adapter handoff. Direct
             pool credit is planned, not claimed.
@@ -374,7 +396,7 @@ export function DemoConsole() {
           <HashRow label="Private note" value={state.noteCommitment} />
         </Panel>
 
-        <Panel title="9. Auditor packet" className="span-12">
+        <Panel title="10. Auditor packet" className="span-12">
           <p>
             User-exported disclosure packet with schema fields, verification
             steps, and caveats for dev proofs, fixture data, and Mode A handoff.

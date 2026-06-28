@@ -42,6 +42,7 @@ console.log(`proof_mode=${proof.proofMode}`);
 console.log(`source_tx=${witness.txHash}`);
 console.log(`journal_digest=${proof.journalDigestHex}`);
 console.log(`claim_nullifier=${proof.publicOutputs.claimNullifier}`);
+console.log(`cctp_message_hash=${proof.publicOutputs.cctpMessageHash}`);
 console.log(`auditor_packet_caveats=${packet.caveats.length}`);
 
 function assert(condition, message) {
@@ -93,11 +94,37 @@ function validateWitness(value) {
     "witness.complianceMode invalid"
   );
   assert(value.complianceWitness?.valid === true, "witness compliance must be valid");
+  validateCctpSettlement(value.cctpSettlement, "witness.cctpSettlement");
   assertEqual("expected sourceChainId", value.sourceChainId, value.expected.sourceChainId);
   assertEqual("expected escrowContract", value.escrowContract, value.expected.escrowContract);
   assertEqual("expected tokenAddress", value.tokenAddress, value.expected.tokenAddress);
   assertEqual("expected complianceRoot", value.complianceRoot, value.expected.complianceRoot);
   assertEqual("expected destinationChainId", value.destinationChainId, value.expected.destinationChainId);
+  assertEqual(
+    "expected CCTP source domain",
+    value.cctpSettlement.sourceDomain,
+    value.expected.cctpSourceDomain
+  );
+  assertEqual(
+    "expected CCTP destination domain",
+    value.cctpSettlement.destinationDomain,
+    value.expected.cctpDestinationDomain
+  );
+  assertEqual(
+    "expected CCTP mint recipient",
+    value.cctpSettlement.mintRecipient,
+    value.expected.cctpMintRecipient
+  );
+}
+
+function validateCctpSettlement(value, label) {
+  assert(value && typeof value === "object", `${label} missing`);
+  assert(Number.isInteger(value.sourceDomain), `${label}.sourceDomain invalid`);
+  assert(Number.isInteger(value.destinationDomain), `${label}.destinationDomain invalid`);
+  assert(isHex(value.nonce, 32), `${label}.nonce invalid`);
+  assert(isHex(value.messageHash, 32), `${label}.messageHash invalid`);
+  assert(isHex(value.attestationHash, 32), `${label}.attestationHash invalid`);
+  assert(isHex(value.mintRecipient, 32), `${label}.mintRecipient invalid`);
 }
 
 function validateProof(value) {
@@ -106,7 +133,7 @@ function validateProof(value) {
   assert(isHexBytes(value.sealHex), "proof.sealHex invalid");
   assert(isHex(value.imageIdHex, 32), "proof.imageIdHex invalid");
   assert(isHexBytes(value.journalHex), "proof.journalHex invalid");
-  assert((value.journalHex.length - 2) / 2 === 289, "proof.journalHex must encode 289 bytes");
+  assert((value.journalHex.length - 2) / 2 === 425, "proof.journalHex must encode 425 bytes");
   assert(isHex(value.journalDigestHex, 32), "proof.journalDigestHex invalid");
   assert(isHex(value.witnessHash, 32), "proof.witnessHash invalid");
   validateJournal(value.publicOutputs);
@@ -129,6 +156,12 @@ function validateJournal(value) {
   assert(isHex(value.eventCommitment, 32), "journal.eventCommitment invalid");
   assert(Number.isInteger(value.destinationChainId), "journal.destinationChainId invalid");
   assert(Number.isInteger(value.expiresAtLedger), "journal.expiresAtLedger invalid");
+  assert(Number.isInteger(value.cctpSourceDomain), "journal.cctpSourceDomain invalid");
+  assert(Number.isInteger(value.cctpDestinationDomain), "journal.cctpDestinationDomain invalid");
+  assert(isHex(value.cctpNonce, 32), "journal.cctpNonce invalid");
+  assert(isHex(value.cctpMessageHash, 32), "journal.cctpMessageHash invalid");
+  assert(isHex(value.cctpAttestationHash, 32), "journal.cctpAttestationHash invalid");
+  assert(isHex(value.cctpMintRecipient, 32), "journal.cctpMintRecipient invalid");
 }
 
 function validateAuditorPacket(value) {
@@ -139,6 +172,9 @@ function validateAuditorPacket(value) {
   assert(isHex(value.noteCommitment, 32), "auditorPacket.noteCommitment invalid");
   assert(isHex(value.claimNullifier, 32), "auditorPacket.claimNullifier invalid");
   assert(isHex(value.eventCommitment, 32), "auditorPacket.eventCommitment invalid");
+  assert(isHex(value.cctpMessageHash, 32), "auditorPacket.cctpMessageHash invalid");
+  assert(isHex(value.cctpAttestationHash, 32), "auditorPacket.cctpAttestationHash invalid");
+  assert(isHex(value.cctpNonce, 32), "auditorPacket.cctpNonce invalid");
   assert(isHex(value.proofImageId, 32), "auditorPacket.proofImageId invalid");
   assert(isHex(value.journalDigest, 32), "auditorPacket.journalDigest invalid");
   assert(Array.isArray(value.caveats) && value.caveats.length > 0, "auditorPacket.caveats missing");
@@ -164,6 +200,28 @@ function assertProofMatchesWitness(witness, proof) {
   );
   assertEqual("complianceRoot", witness.complianceRoot, outputs.complianceRoot);
   assertEqual("destinationChainId", witness.destinationChainId, outputs.destinationChainId);
+  assertEqual("cctpSourceDomain", witness.cctpSettlement.sourceDomain, outputs.cctpSourceDomain);
+  assertEqual(
+    "cctpDestinationDomain",
+    witness.cctpSettlement.destinationDomain,
+    outputs.cctpDestinationDomain
+  );
+  assertEqual("cctpNonce", witness.cctpSettlement.nonce, outputs.cctpNonce);
+  assertEqual(
+    "cctpMessageHash",
+    witness.cctpSettlement.messageHash,
+    outputs.cctpMessageHash
+  );
+  assertEqual(
+    "cctpAttestationHash",
+    witness.cctpSettlement.attestationHash,
+    outputs.cctpAttestationHash
+  );
+  assertEqual(
+    "cctpMintRecipient",
+    witness.cctpSettlement.mintRecipient,
+    outputs.cctpMintRecipient
+  );
 }
 
 function assertPacketMatchesWitnessAndProof(packet, witness, proof) {
@@ -183,6 +241,17 @@ function assertPacketMatchesWitnessAndProof(packet, witness, proof) {
   );
   assertEqual("packet.proofImageId", packet.proofImageId, proof.imageIdHex);
   assertEqual("packet.journalDigest", packet.journalDigest, proof.journalDigestHex);
+  assertEqual(
+    "packet.cctpMessageHash",
+    packet.cctpMessageHash,
+    proof.publicOutputs.cctpMessageHash
+  );
+  assertEqual(
+    "packet.cctpAttestationHash",
+    packet.cctpAttestationHash,
+    proof.publicOutputs.cctpAttestationHash
+  );
+  assertEqual("packet.cctpNonce", packet.cctpNonce, proof.publicOutputs.cctpNonce);
   if (proof.proofMode === "dev") {
     assert(
       packet.caveats.some((caveat) =>
@@ -211,6 +280,23 @@ function validateJournalDigest(proof) {
 }
 
 function validateFixtureFailures(submission) {
+  if (submission.cctpSettlement) {
+    validateCctpSettlement(submission.cctpSettlement, "submission.cctpSettlement");
+    if (submission.cctpSettlement.messageHex) {
+      assertEqual(
+        "submission CCTP message hash",
+        hashHex(submission.cctpSettlement.messageHex),
+        submission.proofArtifact.publicOutputs.cctpMessageHash
+      );
+    }
+    if (submission.cctpSettlement.attestationHex) {
+      assertEqual(
+        "submission CCTP attestation hash",
+        hashHex(submission.cctpSettlement.attestationHex),
+        submission.proofArtifact.publicOutputs.cctpAttestationHash
+      );
+    }
+  }
   if (!submission.stellarClaim) {
     return;
   }
@@ -230,5 +316,10 @@ function validateFixtureFailures(submission) {
       .includes("invalid token"),
     "fixture invalid-token failure missing"
   );
+}
+
+function hashHex(value) {
+  assert(isHexBytes(value), "hex payload invalid");
+  return `0x${crypto.createHash("sha256").update(Buffer.from(value.slice(2), "hex")).digest("hex")}`;
 }
 NODE

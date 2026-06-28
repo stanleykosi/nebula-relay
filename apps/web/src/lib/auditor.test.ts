@@ -29,6 +29,9 @@ describe("auditor packet generator", () => {
     );
     expect(packet.proofImageId).toBe(devProofArtifact.imageIdHex);
     expect(packet.journalDigest).toBe(devProofArtifact.journalDigestHex);
+    expect(packet.cctpMessageHash).toBe(
+      devProofArtifact.publicOutputs.cctpMessageHash
+    );
     expect(packet.verificationInstructions.length).toBeGreaterThan(0);
   });
 

@@ -39,6 +39,9 @@ const auditorPacket = {
   eventCommitment: proof.publicOutputs.eventCommitment,
   proofImageId: proof.imageIdHex,
   journalDigest: proof.journalDigestHex,
+  cctpMessageHash: proof.publicOutputs.cctpMessageHash,
+  cctpAttestationHash: proof.publicOutputs.cctpAttestationHash,
+  cctpNonce: proof.publicOutputs.cctpNonce,
   disclosureMode: "user-exported",
   caveats: buildCaveats(proof.proofMode),
   verificationInstructions: [
@@ -48,6 +51,13 @@ const auditorPacket = {
         "Parse the JSON with @nebula/core AuditorPacketSchema before relying on any field.",
       expected:
         "The packet has version 1, required hashes, at least one caveat, and verification instructions.",
+    },
+    {
+      title: "Confirm CCTP settlement",
+      description:
+        "Compare the CCTP message hash, attestation hash, and nonce against the Circle Iris message used for the Stellar mint.",
+      expected:
+        "The Nebula journal and auditor packet bind to the same CCTP burn/mint message.",
     },
     {
       title: "Confirm source lock",
@@ -101,6 +111,17 @@ const submission = {
       "Invalid token rejected: witness token does not match expected token.",
     privateNoteHandoff:
       "Mode A handoff ready: private-note-compatible commitment recorded; direct pool credit is planned.",
+  },
+  cctpSettlement: {
+    mode: "fixture",
+    sourceDomain: witness.cctpSettlement.sourceDomain,
+    destinationDomain: witness.cctpSettlement.destinationDomain,
+    nonce: witness.cctpSettlement.nonce,
+    messageHash: proof.publicOutputs.cctpMessageHash,
+    attestationHash: proof.publicOutputs.cctpAttestationHash,
+    mintRecipient: proof.publicOutputs.cctpMintRecipient,
+    messageHex: "0x010203040506",
+    attestationHex: "0x0a0b0c0d",
   },
   auditorPacket,
 };
@@ -165,6 +186,32 @@ function assertProofMatchesWitness(witness, proof) {
     witness.destinationChainId,
     outputs.destinationChainId
   );
+  assertEqual(
+    "cctpSourceDomain",
+    witness.cctpSettlement.sourceDomain,
+    outputs.cctpSourceDomain
+  );
+  assertEqual(
+    "cctpDestinationDomain",
+    witness.cctpSettlement.destinationDomain,
+    outputs.cctpDestinationDomain
+  );
+  assertEqual("cctpNonce", witness.cctpSettlement.nonce, outputs.cctpNonce);
+  assertEqual(
+    "cctpMessageHash",
+    witness.cctpSettlement.messageHash,
+    outputs.cctpMessageHash
+  );
+  assertEqual(
+    "cctpAttestationHash",
+    witness.cctpSettlement.attestationHash,
+    outputs.cctpAttestationHash
+  );
+  assertEqual(
+    "cctpMintRecipient",
+    witness.cctpSettlement.mintRecipient,
+    outputs.cctpMintRecipient
+  );
 }
 
 function buildCaveats(proofMode) {
@@ -180,7 +227,7 @@ function buildCaveats(proofMode) {
     "This packet is not a production view-key system and does not provide ongoing account surveillance.",
     "Packet does not reveal private keys, note secrets, recipient secrets, or allowlist witness paths.",
     "Mode A private-note-compatible handoff; no direct upstream pool credit is claimed.",
-    "User-funded Stellar deposit path is not a complete value bridge.",
+    "CCTP settlement is proof-bound in the artifact, but this packet is not a legal or security audit.",
   ];
 }
 NODE

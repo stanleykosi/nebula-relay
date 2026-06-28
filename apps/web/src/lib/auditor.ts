@@ -11,7 +11,7 @@ export const REQUIRED_AUDITOR_CAVEATS = [
   "This packet is not a production view-key system and does not provide ongoing account surveillance.",
   "Packet does not reveal private keys, note secrets, recipient secrets, or allowlist witness paths.",
   "Mode A private-note-compatible handoff; no direct upstream pool credit is claimed.",
-  "User-funded Stellar deposit path is not a complete value bridge.",
+  "CCTP settlement is proof-bound in the artifact, but this packet is not a legal or security audit.",
 ] as const;
 
 export const FORBIDDEN_AUDITOR_CLAIMS = [
@@ -53,6 +53,13 @@ export const AUDITOR_VERIFICATION_INSTRUCTIONS: readonly AuditorVerificationInst
         "A replay with the same claimNullifier fails with NebulaRelay's replay protection.",
     },
     {
+      title: "Confirm CCTP settlement",
+      description:
+        "Compare the CCTP message hash, attestation hash, and nonce against the Circle Iris message used for the Stellar mint.",
+      expected:
+        "The Nebula journal and auditor packet bind to the same CCTP burn/mint message.",
+    },
+    {
       title: "Review disclosure caveats",
       description:
         "Read every caveat before treating this as audit evidence.",
@@ -85,6 +92,9 @@ export function buildAuditorPacket(
     eventCommitment: input.proof.publicOutputs.eventCommitment,
     proofImageId: input.proof.imageIdHex,
     journalDigest: input.proof.journalDigestHex,
+    cctpMessageHash: input.proof.publicOutputs.cctpMessageHash,
+    cctpAttestationHash: input.proof.publicOutputs.cctpAttestationHash,
+    cctpNonce: input.proof.publicOutputs.cctpNonce,
     disclosureMode: input.disclosureMode ?? "user-exported",
     caveats: buildCaveats(input.proof.proofMode, input.extraCaveats),
     verificationInstructions: AUDITOR_VERIFICATION_INSTRUCTIONS.map(
@@ -154,6 +164,32 @@ function assertProofMatchesWitness(
     ],
     ["complianceRoot", witness.complianceRoot, outputs.complianceRoot],
     ["destinationChainId", witness.destinationChainId, outputs.destinationChainId],
+    [
+      "cctpSourceDomain",
+      witness.cctpSettlement.sourceDomain,
+      outputs.cctpSourceDomain,
+    ],
+    [
+      "cctpDestinationDomain",
+      witness.cctpSettlement.destinationDomain,
+      outputs.cctpDestinationDomain,
+    ],
+    ["cctpNonce", witness.cctpSettlement.nonce, outputs.cctpNonce],
+    [
+      "cctpMessageHash",
+      witness.cctpSettlement.messageHash,
+      outputs.cctpMessageHash,
+    ],
+    [
+      "cctpAttestationHash",
+      witness.cctpSettlement.attestationHash,
+      outputs.cctpAttestationHash,
+    ],
+    [
+      "cctpMintRecipient",
+      witness.cctpSettlement.mintRecipient,
+      outputs.cctpMintRecipient,
+    ],
   ];
 
   const mismatch = checks.find(([, left, right]) => !sameValue(left, right));

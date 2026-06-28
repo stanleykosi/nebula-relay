@@ -7,12 +7,22 @@ export const Hex20Schema = hex(20);
 export const Hex32Schema = hex(32);
 export const HexBytesSchema = z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/);
 export const DecimalStringSchema = z.string().regex(/^(0|[1-9][0-9]*)$/);
+export const Uint32Schema = z.number().int().nonnegative().max(4_294_967_295);
 
 export const ComplianceModeSchema = z.enum([
   "disabled-demo",
   "allowlist-membership",
   "denylist-non-membership",
 ]);
+
+export const CctpSettlementSchema = z.object({
+  sourceDomain: Uint32Schema,
+  destinationDomain: Uint32Schema,
+  nonce: Hex32Schema,
+  messageHash: Hex32Schema,
+  attestationHash: Hex32Schema,
+  mintRecipient: Hex32Schema,
+});
 
 export const LockWitnessSchema = z.object({
   version: z.literal(1),
@@ -31,6 +41,7 @@ export const LockWitnessSchema = z.object({
   complianceRoot: Hex32Schema,
   complianceMode: ComplianceModeSchema,
   destinationChainId: z.number().int().positive(),
+  cctpSettlement: CctpSettlementSchema,
   expected: z.object({
     sourceChainId: z.number().int().positive(),
     escrowContract: Hex20Schema,
@@ -41,6 +52,9 @@ export const LockWitnessSchema = z.object({
     destinationChainId: z.number().int().positive(),
     networkDomain: Hex32Schema,
     expiresAtLedger: z.number().int().positive(),
+    cctpSourceDomain: Uint32Schema,
+    cctpDestinationDomain: Uint32Schema,
+    cctpMintRecipient: Hex32Schema,
   }),
   complianceWitness: z.object({
     valid: z.boolean(),
@@ -65,6 +79,12 @@ export const NebulaJournalSchema = z.object({
   eventCommitment: Hex32Schema,
   destinationChainId: z.number().int().positive(),
   expiresAtLedger: z.number().int().positive(),
+  cctpSourceDomain: Uint32Schema,
+  cctpDestinationDomain: Uint32Schema,
+  cctpNonce: Hex32Schema,
+  cctpMessageHash: Hex32Schema,
+  cctpAttestationHash: Hex32Schema,
+  cctpMintRecipient: Hex32Schema,
 });
 
 export const ProofArtifactSchema = z.object({
@@ -97,6 +117,9 @@ export const AuditorPacketSchema = z.object({
   eventCommitment: Hex32Schema,
   proofImageId: Hex32Schema,
   journalDigest: Hex32Schema,
+  cctpMessageHash: Hex32Schema,
+  cctpAttestationHash: Hex32Schema,
+  cctpNonce: Hex32Schema,
   disclosureMode: z.enum([
     "user-exported",
     "view-key-demo",
@@ -111,6 +134,7 @@ export const AuditorPacketSchema = z.object({
 export type LockWitness = z.infer<typeof LockWitnessSchema>;
 export type NebulaJournal = z.infer<typeof NebulaJournalSchema>;
 export type ProofArtifact = z.infer<typeof ProofArtifactSchema>;
+export type CctpSettlement = z.infer<typeof CctpSettlementSchema>;
 export type AuditorVerificationInstruction = z.infer<
   typeof AuditorVerificationInstructionSchema
 >;

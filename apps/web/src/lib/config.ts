@@ -41,7 +41,7 @@ export const demoConfig: DemoConfig = {
 export const implementedVsDemoOnly = [
   {
     label: "Implemented",
-    text: "EVM Locked event parser, RISC Zero dev artifact, Stellar claim builder, nullifier replay model, and Mode A private-note handoff.",
+    text: "EVM Locked event parser, RISC Zero dev artifact, Stellar claim builder, nullifier replay model, proof-bound CCTP settlement path, and Mode A private-note handoff.",
   },
   {
     label: "Demo-only",
@@ -49,6 +49,6 @@ export const implementedVsDemoOnly = [
   },
   {
     label: "Planned",
-    text: "Live router Groth16 run, receipt-root finality, direct private-pool credit, and CCTP-backed testnet settlement.",
+    text: "Live router Groth16 run, receipt-root finality, direct private-pool credit, and public CCTP testnet settlement transcript.",
   },
 ];

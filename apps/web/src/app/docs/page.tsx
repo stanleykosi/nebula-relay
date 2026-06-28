@@ -14,8 +14,9 @@ export default function DocsPage() {
       <h1 className="page-title">What Nebula Relay proves</h1>
       <p className="lead">
         Nebula is relay-first: it proves source-chain lock intent and
-        compliance fields, then gates a Stellar private-note-compatible claim.
-        Settlement liquidity and CCTP-backed value movement are future layers.
+        compliance fields, binds a CCTP settlement transcript, then gates a
+        Stellar private-note-compatible claim. The UI still runs fixture/dev
+        mode by default.
       </p>
       <ModeStrip config={demoConfig} />
 
@@ -30,7 +31,8 @@ export default function DocsPage() {
           <p>
             The current statement validates a structured EVM lock witness:
             approved escrow, token, amount bounds, compliance root, destination,
-            note commitment, event commitment, and nullifier.
+            note commitment, event commitment, CCTP message/attestation hashes,
+            mint recipient, and nullifier.
           </p>
           <HashRow label="Image ID" value={devProofArtifact.imageIdHex} />
           <HashRow label="Journal digest" value={devProofArtifact.journalDigestHex} />
@@ -46,7 +48,8 @@ export default function DocsPage() {
           <p>
             `NebulaRelay` checks the verifier boundary, image ID, decoded
             journal, source config, compliance root, destination, and nullifier
-            storage before recording the note.
+            storage. It settles through the configured CCTP Forwarder before
+            recording the note.
           </p>
           <HashRow
             label="Nullifier"
@@ -72,12 +75,14 @@ export default function DocsPage() {
             <Badge tone="info">
               <WalletCards size={14} /> Mode A handoff
             </Badge>
-            <Badge tone="danger">Not a full bridge</Badge>
+            <Badge tone="danger">Not live bridge finality</Badge>
           </div>
           <p>
             Stage 8 records a private-note-compatible commitment and adapter
-            handoff. Direct upstream pool credit and CCTP-backed testnet
-            settlement are production-path work.
+            handoff. CCTP transaction builders and proof-bound settlement
+            fields are implemented locally, while direct upstream pool credit
+            and a public testnet settlement transcript remain production-path
+            work.
           </p>
           <HashRow
             label="Note commitment"

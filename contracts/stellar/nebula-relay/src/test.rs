@@ -1,5 +1,6 @@
 extern crate std;
 
+use super::cctp_forwarder::CctpForwarderError;
 use super::pool_adapter::PoolAdapterError;
 use super::verifier_router::VerifierError;
 use super::*;
@@ -46,6 +47,17 @@ enum PoolHarnessKey {
     LastNullifier,
     LastEvent,
     LastPayload,
+}
+
+#[contracttype]
+#[derive(Clone)]
+enum CctpHarnessKey {
+    ExpectedMessage,
+    ExpectedAttestation,
+    ShouldFail,
+    Called,
+    LastMessage,
+    LastAttestation,
 }
 
 #[contract]
@@ -307,6 +319,83 @@ impl PoolAdapterHarness {
     }
 }
 
+#[contract]
+struct CctpForwarderHarness;
+
+#[contractimpl]
+impl CctpForwarderHarness {
+    pub fn configure(
+        env: Env,
+        expected_message: Bytes,
+        expected_attestation: Bytes,
+        should_fail: bool,
+    ) {
+        env.storage()
+            .temporary()
+            .set(&CctpHarnessKey::ExpectedMessage, &expected_message);
+        env.storage()
+            .temporary()
+            .set(&CctpHarnessKey::ExpectedAttestation, &expected_attestation);
+        env.storage()
+            .temporary()
+            .set(&CctpHarnessKey::ShouldFail, &should_fail);
+        env.storage()
+            .temporary()
+            .set(&CctpHarnessKey::Called, &false);
+    }
+
+    pub fn mint_and_forward(
+        env: Env,
+        message: Bytes,
+        attestation: Bytes,
+    ) -> Result<(), CctpForwarderError> {
+        env.storage()
+            .temporary()
+            .set(&CctpHarnessKey::Called, &true);
+        env.storage()
+            .temporary()
+            .set(&CctpHarnessKey::LastMessage, &message);
+        env.storage()
+            .temporary()
+            .set(&CctpHarnessKey::LastAttestation, &attestation);
+
+        if env
+            .storage()
+            .temporary()
+            .get(&CctpHarnessKey::ShouldFail)
+            .unwrap_or(false)
+        {
+            return Err(CctpForwarderError::Rejected);
+        }
+
+        let expected_message: Bytes = env
+            .storage()
+            .temporary()
+            .get(&CctpHarnessKey::ExpectedMessage)
+            .ok_or(CctpForwarderError::Rejected)?;
+        let expected_attestation: Bytes = env
+            .storage()
+            .temporary()
+            .get(&CctpHarnessKey::ExpectedAttestation)
+            .ok_or(CctpForwarderError::Rejected)?;
+        if message != expected_message || attestation != expected_attestation {
+            return Err(CctpForwarderError::Rejected);
+        }
+        Ok(())
+    }
+
+    pub fn was_called(env: Env) -> bool {
+        env.storage()
+            .temporary()
+            .get(&CctpHarnessKey::Called)
+            .unwrap_or(false)
+    }
+
+    pub fn last_message(env: Env) -> Option<Bytes> {
+        env.storage().temporary().get(&CctpHarnessKey::LastMessage)
+    }
+}
+
 fn hex20(env: &Env, value: &str) -> BytesN<20> {
     let raw = value.trim_start_matches("0x");
     let bytes = hex::decode(raw).unwrap();
@@ -324,6 +413,14 @@ fn bytes_from_hex(env: &Env, value: &str) -> Bytes {
     Bytes::from_slice(env, &hex::decode(raw).unwrap())
 }
 
+fn cctp_message(env: &Env) -> Bytes {
+    bytes_from_hex(env, "0x010203040506")
+}
+
+fn cctp_attestation(env: &Env) -> Bytes {
+    bytes_from_hex(env, "0x0a0b0c0d")
+}
+
 fn fixture(name: &str) -> String {
     format!("{}/../../../fixtures/{name}", env!("CARGO_MANIFEST_DIR"))
 }
@@ -333,6 +430,7 @@ struct Setup {
     contract_id: Address,
     verifier_router: Address,
     pool_adapter: Address,
+    cctp_forwarder: Address,
     asset: Address,
     admin: Address,
     claimant: Address,
@@ -349,6 +447,10 @@ impl Setup {
 
     fn adapter(&self) -> PoolAdapterHarnessClient<'_> {
         PoolAdapterHarnessClient::new(&self.env, &self.pool_adapter)
+    }
+
+    fn cctp(&self) -> CctpForwarderHarnessClient<'_> {
+        CctpForwarderHarnessClient::new(&self.env, &self.cctp_forwarder)
     }
 
     fn configure_router(
@@ -388,6 +490,14 @@ impl Setup {
             &should_fail,
         );
     }
+
+    fn configure_cctp(&self, should_fail: bool) {
+        self.cctp().configure(
+            &cctp_message(&self.env),
+            &cctp_attestation(&self.env),
+            &should_fail,
+        );
+    }
 }
 
 struct HandoffFields {
@@ -416,6 +526,7 @@ fn setup() -> Setup {
     let digest: BytesN<32> = env.crypto().sha256(&journal).into();
     router.configure(&seal, &image_id, &digest, &false);
     let pool_adapter = env.register(PoolAdapterHarness, ());
+    let cctp_forwarder = env.register(CctpForwarderHarness, ());
 
     let contract_id = env.register(NebulaRelay, ());
     let client = NebulaRelayClient::new(&env, &contract_id);
@@ -428,6 +539,8 @@ fn setup() -> Setup {
         &admin,
         &verifier_router,
         &pool_adapter,
+        &cctp_forwarder,
+        &hex32(&env, &witness.expected.cctp_mint_recipient),
         &BytesN::from_array(&env, &DEV_IMAGE_ID),
         &asset,
         &hex32(&env, &witness.expected.network_domain),
@@ -454,11 +567,13 @@ fn setup() -> Setup {
         contract_id,
         verifier_router,
         pool_adapter,
+        cctp_forwarder,
         asset,
         admin,
         claimant,
     };
     setup.configure_adapter_from_journal(&valid_journal(), false);
+    setup.configure_cctp(false);
     setup
 }
 
@@ -502,15 +617,25 @@ fn valid_claim_stores_nullifier_and_record() {
     let client = s.client();
     let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     let expected_digest = s.configure_router(&seal, &image_id, &journal, false);
-    let receipt = client.claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env));
+    let receipt = client.claim(
+        &s.claimant,
+        &seal,
+        &image_id,
+        &journal,
+        &cctp_message(&s.env),
+        &cctp_attestation(&s.env),
+        &Bytes::new(&s.env),
+    );
 
     assert_eq!(receipt.nullifier, nullifier);
     assert!(client.is_claimed(&nullifier));
     let record = client.get_claim(&nullifier).unwrap();
     assert_eq!(record.amount, 100_000_000);
+    assert_eq!(record.cctp_message_hash, receipt.cctp_message_hash);
     let note_record = client.get_note(&receipt.note_commitment).unwrap();
     assert_eq!(note_record, record);
     assert_eq!(s.router().last_journal_digest(), Some(expected_digest));
+    assert!(s.cctp().was_called());
 }
 
 #[test]
@@ -522,7 +647,15 @@ fn claim_hands_off_private_note_to_adapter() {
     s.configure_router(&seal, &image_id, &journal, false);
     s.configure_adapter_from_journal(&valid_journal(), false);
 
-    let receipt = client.claim(&s.claimant, &seal, &image_id, &journal, &payload);
+    let receipt = client.claim(
+        &s.claimant,
+        &seal,
+        &image_id,
+        &journal,
+        &cctp_message(&s.env),
+        &cctp_attestation(&s.env),
+        &payload,
+    );
 
     assert!(s.adapter().was_called());
     assert_eq!(
@@ -568,11 +701,105 @@ fn adapter_failure_rolls_back_nullifier_storage() {
     s.configure_adapter_from_journal(&model, true);
 
     assert!(client
-        .try_claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env),)
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
         .is_err());
     assert!(!client.is_claimed(&nullifier));
     assert!(client.get_claim(&nullifier).is_none());
     assert!(client.get_note(&fields.note_commitment).is_none());
+}
+
+#[test]
+fn cctp_settlement_failure_rolls_back_before_handoff_and_storage() {
+    let s = setup();
+    let client = s.client();
+    let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
+    s.configure_router(&seal, &image_id, &journal, false);
+    s.configure_cctp(true);
+
+    assert!(client
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
+        .is_err());
+    assert!(!s.adapter().was_called());
+    assert!(!client.is_claimed(&nullifier));
+}
+
+#[test]
+fn wrong_cctp_message_or_attestation_fails_before_handoff() {
+    let s = setup();
+    let client = s.client();
+    let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
+    s.configure_router(&seal, &image_id, &journal, false);
+
+    assert!(client
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal,
+            &bytes_from_hex(&s.env, "0xff"),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
+        .is_err());
+    assert!(!s.cctp().was_called());
+    assert!(!s.adapter().was_called());
+    assert!(!client.is_claimed(&nullifier));
+}
+
+#[test]
+fn wrong_cctp_destination_or_mint_recipient_journal_fails() {
+    let s = setup();
+
+    let mut wrong_domain = valid_journal();
+    wrong_domain.cctp_destination_domain = 26;
+    let (seal, image_id, journal_bytes) = signed_journal(&s.env, &wrong_domain);
+    s.configure_router(&seal, &image_id, &journal_bytes, false);
+    assert!(s
+        .client()
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal_bytes,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
+        .is_err());
+
+    let mut wrong_recipient = valid_journal();
+    wrong_recipient.cctp_mint_recipient =
+        "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_owned();
+    let (seal, image_id, journal_bytes) = signed_journal(&s.env, &wrong_recipient);
+    s.configure_router(&seal, &image_id, &journal_bytes, false);
+    assert!(s
+        .client()
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal_bytes,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
+        .is_err());
 }
 
 #[test]
@@ -581,10 +808,26 @@ fn replay_fails() {
     let client = s.client();
     let (seal, image_id, journal, _) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     s.configure_router(&seal, &image_id, &journal, false);
-    client.claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env));
+    client.claim(
+        &s.claimant,
+        &seal,
+        &image_id,
+        &journal,
+        &cctp_message(&s.env),
+        &cctp_attestation(&s.env),
+        &Bytes::new(&s.env),
+    );
     assert!(s
         .client()
-        .try_claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env))
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
         .is_err());
 }
 
@@ -600,6 +843,8 @@ fn wrong_image_id_fails() {
             &seal,
             &bad_image,
             &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
             &Bytes::new(&s.env)
         )
         .is_err());
@@ -615,7 +860,15 @@ fn tampered_seal_fails() {
     );
     assert!(s
         .client()
-        .try_claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env))
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
         .is_err());
 }
 
@@ -628,7 +881,15 @@ fn router_rejects_wrong_journal_digest() {
 
     assert!(s
         .client()
-        .try_claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env))
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
         .is_err());
 }
 
@@ -640,7 +901,15 @@ fn router_error_fails_before_handoff_and_storage() {
 
     assert!(s
         .client()
-        .try_claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env))
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
         .is_err());
     assert!(!s.adapter().was_called());
     assert!(!s.client().is_claimed(&nullifier));
@@ -734,6 +1003,8 @@ fn contract_rejects_wrong_token_journal() {
             &seal,
             &image_id,
             &journal_bytes,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
             &Bytes::new(&s.env),
         )
         .is_err());
@@ -753,6 +1024,8 @@ fn contract_rejects_wrong_escrow_journal() {
             &seal,
             &image_id,
             &journal_bytes,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
             &Bytes::new(&s.env),
         )
         .is_err());
@@ -773,6 +1046,8 @@ fn contract_rejects_bad_compliance_root_journal() {
             &seal,
             &image_id,
             &journal_bytes,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
             &Bytes::new(&s.env),
         )
         .is_err());
@@ -792,6 +1067,8 @@ fn contract_rejects_wrong_destination_journal() {
             &seal,
             &image_id,
             &journal_bytes,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
             &Bytes::new(&s.env),
         )
         .is_err());
@@ -813,6 +1090,8 @@ fn contract_rejects_malformed_public_outputs() {
             &seal,
             &image_id,
             &journal_bytes,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
             &Bytes::new(&s.env),
         )
         .is_err());
@@ -828,6 +1107,8 @@ fn contract_rejects_malformed_public_outputs() {
             &seal,
             &image_id,
             &journal_bytes,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
             &Bytes::new(&s.env),
         )
         .is_err());
@@ -845,12 +1126,22 @@ fn contract_rejects_unregistered_source_and_root_from_journal() {
         &s.admin,
         &s.verifier_router,
         &other,
+        &s.cctp_forwarder,
+        &hex32(&s.env, &witness.expected.cctp_mint_recipient),
         &BytesN::from_array(&s.env, &DEV_IMAGE_ID),
         &other,
         &hex32(&s.env, &witness.expected.network_domain),
     );
     assert!(client
-        .try_claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env))
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
         .is_err());
 }
 
@@ -861,7 +1152,15 @@ fn paused_claim_fails() {
     s.client().pause(&s.admin);
     assert!(s
         .client()
-        .try_claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env))
+        .try_claim(
+            &s.claimant,
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &Bytes::new(&s.env),
+        )
         .is_err());
 }
 
@@ -876,6 +1175,7 @@ fn setup_dev_mock() -> Setup {
     let claimant = Address::generate(&env);
     let verifier_router = Address::generate(&env);
     let pool_adapter = env.register(PoolAdapterHarness, ());
+    let cctp_forwarder = env.register(CctpForwarderHarness, ());
     let asset = Address::generate(&env);
     let witness = load_witness(fixture("valid-lock.json")).unwrap();
 
@@ -883,6 +1183,8 @@ fn setup_dev_mock() -> Setup {
         &admin,
         &verifier_router,
         &pool_adapter,
+        &cctp_forwarder,
+        &hex32(&env, &witness.expected.cctp_mint_recipient),
         &BytesN::from_array(&env, &DEV_IMAGE_ID),
         &asset,
         &hex32(&env, &witness.expected.network_domain),
@@ -910,11 +1212,13 @@ fn setup_dev_mock() -> Setup {
         contract_id,
         verifier_router,
         pool_adapter,
+        cctp_forwarder,
         asset,
         admin,
         claimant,
     };
     setup.configure_adapter_from_journal(&valid_journal(), false);
+    setup.configure_cctp(false);
     setup
 }
 
@@ -923,9 +1227,15 @@ fn setup_dev_mock() -> Setup {
 fn explicit_dev_mock_verifier_still_accepts_stage_6_artifact() {
     let s = setup_dev_mock();
     let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
-    let receipt = s
-        .client()
-        .claim(&s.claimant, &seal, &image_id, &journal, &Bytes::new(&s.env));
+    let receipt = s.client().claim(
+        &s.claimant,
+        &seal,
+        &image_id,
+        &journal,
+        &cctp_message(&s.env),
+        &cctp_attestation(&s.env),
+        &Bytes::new(&s.env),
+    );
 
     assert_eq!(receipt.nullifier, nullifier);
     assert!(s.client().is_claimed(&nullifier));

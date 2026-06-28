@@ -23,7 +23,10 @@ describe("frontend demo state", () => {
   it("runs the complete fixture demo through auditor export", () => {
     const state = runFullFixtureDemo();
 
-    expect(state.completed).toHaveLength(12);
+    expect(state.completed).toHaveLength(13);
+    expect(state.cctpMessageHash).toBe(
+      state.proof?.publicOutputs.cctpMessageHash
+    );
     expect(state.nullifierStored).toBe(true);
     expect(state.replayFailure).toContain("NullifierAlreadyClaimed");
     expect(state.invalidTokenFailure).toContain("Invalid token rejected");

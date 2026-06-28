@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-27T17:15:08Z",
+  "generatedAt": "2026-06-28T13:39:01Z",
   "mode": {
     "network": "fixture",
     "proofMode": "dev",
@@ -24,6 +24,14 @@
     "complianceRoot": "0x9999999999999999999999999999999999999999999999999999999999999999",
     "complianceMode": "allowlist-membership",
     "destinationChainId": 1501,
+    "cctpSettlement": {
+      "sourceDomain": 0,
+      "destinationDomain": 27,
+      "nonce": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "messageHash": "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
+      "attestationHash": "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+      "mintRecipient": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
     "expected": {
       "sourceChainId": 11155111,
       "escrowContract": "0x1111111111111111111111111111111111111111",
@@ -33,7 +41,10 @@
       "complianceRoot": "0x9999999999999999999999999999999999999999999999999999999999999999",
       "destinationChainId": 1501,
       "networkDomain": "0x4e4542554c415f5354454c4c41525f544553544e45545f563100000000000000",
-      "expiresAtLedger": 999999
+      "expiresAtLedger": 999999,
+      "cctpSourceDomain": 0,
+      "cctpDestinationDomain": 27,
+      "cctpMintRecipient": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     "complianceWitness": {
       "valid": true,
@@ -43,10 +54,10 @@
   "proofArtifact": {
     "version": 1,
     "proofMode": "dev",
-    "sealHex": "0x4e4542554c415f4445565f5345414c5f5631763a5cdc714cc36e9374a42cb7994cfc482e7808b405a92ce98fadc7ce9fb1f3",
+    "sealHex": "0x4e4542554c415f4445565f5345414c5f5631921c0bca6bc2c66f1475265bc68db1d5d0e2ad924c8e7b877e0eca462d96f1a1",
     "imageIdHex": "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
-    "journalHex": "0x000000014e4542554c415f5354454c4c41525f544553544e45545f5631000000000000000000000000aa36a7000000000001e24055555555555555555555555555555555555555555555555555555555555555551111111111111111111111111111111111111111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000000000000000000000005f5e100000000000000006477777777777777777777777777777777777777777777777777777777777777779999999999999999999999999999999999999999999999999999999999999999011006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b691eacc317ed90271348ac26f7939932ebbb4783ad4254add2897b4dc758cc4b00000000000005dd000f423f",
-    "journalDigestHex": "0x763a5cdc714cc36e9374a42cb7994cfc482e7808b405a92ce98fadc7ce9fb1f3",
+    "journalHex": "0x000000014e4542554c415f5354454c4c41525f544553544e45545f5631000000000000000000000000aa36a7000000000001e24055555555555555555555555555555555555555555555555555555555555555551111111111111111111111111111111111111111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000000000000000000000005f5e100000000000000006477777777777777777777777777777777777777777777777777777777777777779999999999999999999999999999999999999999999999999999999999999999018fe8ae542a9a0f38441bcb0ff0c0eef78ac1d4cb88f79089e903e767aac6aea5cffa94aae89eb644f6f5563299faa1e589f277145def40e221fa1f36cc3b3f7400000000000005dd000f423f000000000000001b11111111111111111111111111111111111111111111111111111111111111117192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89b23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "journalDigestHex": "0x921c0bca6bc2c66f1475265bc68db1d5d0e2ad924c8e7b877e0eca462d96f1a1",
     "publicOutputs": {
       "version": 1,
       "domain": "0x4e4542554c415f5354454c4c41525f544553544e45545f563100000000000000",
@@ -60,22 +71,39 @@
       "stellarNoteCommitment": "0x7777777777777777777777777777777777777777777777777777777777777777",
       "complianceRoot": "0x9999999999999999999999999999999999999999999999999999999999999999",
       "complianceMode": 1,
-      "claimNullifier": "0x1006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b",
-      "eventCommitment": "0x691eacc317ed90271348ac26f7939932ebbb4783ad4254add2897b4dc758cc4b",
+      "claimNullifier": "0x8fe8ae542a9a0f38441bcb0ff0c0eef78ac1d4cb88f79089e903e767aac6aea5",
+      "eventCommitment": "0xcffa94aae89eb644f6f5563299faa1e589f277145def40e221fa1f36cc3b3f74",
       "destinationChainId": 1501,
-      "expiresAtLedger": 999999
+      "expiresAtLedger": 999999,
+      "cctpSourceDomain": 0,
+      "cctpDestinationDomain": 27,
+      "cctpNonce": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "cctpMessageHash": "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
+      "cctpAttestationHash": "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+      "cctpMintRecipient": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
-    "generatedAt": "2026-06-27T17:15:08Z",
-    "witnessHash": "0xa481d442d27ad2ec8694fb468bcf466aebe58a9975bfe7c52af4d4aeb454ae56"
+    "generatedAt": "2026-06-28T13:39:01Z",
+    "witnessHash": "0x7e4af2988360a754b268b2957361ebd0d355a7afa0a3afdd8f3eb522499064bc"
   },
   "stellarClaim": {
     "mode": "fixture",
     "txHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "nullifier": "0x1006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b",
+    "nullifier": "0x8fe8ae542a9a0f38441bcb0ff0c0eef78ac1d4cb88f79089e903e767aac6aea5",
     "nullifierStored": true,
     "replayFailure": "NebulaRelay NullifierAlreadyClaimed (#15)",
     "invalidTokenFailure": "Invalid token rejected: witness token does not match expected token.",
     "privateNoteHandoff": "Mode A handoff ready: private-note-compatible commitment recorded; direct pool credit is planned."
+  },
+  "cctpSettlement": {
+    "mode": "fixture",
+    "sourceDomain": 0,
+    "destinationDomain": 27,
+    "nonce": "0x1111111111111111111111111111111111111111111111111111111111111111",
+    "messageHash": "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
+    "attestationHash": "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+    "mintRecipient": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "messageHex": "0x010203040506",
+    "attestationHex": "0x0a0b0c0d"
   },
   "auditorPacket": {
     "version": 1,
@@ -84,10 +112,13 @@
     "sourceLogIndex": 0,
     "stellarClaimTxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "noteCommitment": "0x7777777777777777777777777777777777777777777777777777777777777777",
-    "claimNullifier": "0x1006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b",
-    "eventCommitment": "0x691eacc317ed90271348ac26f7939932ebbb4783ad4254add2897b4dc758cc4b",
+    "claimNullifier": "0x8fe8ae542a9a0f38441bcb0ff0c0eef78ac1d4cb88f79089e903e767aac6aea5",
+    "eventCommitment": "0xcffa94aae89eb644f6f5563299faa1e589f277145def40e221fa1f36cc3b3f74",
     "proofImageId": "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
-    "journalDigest": "0x763a5cdc714cc36e9374a42cb7994cfc482e7808b405a92ce98fadc7ce9fb1f3",
+    "journalDigest": "0x921c0bca6bc2c66f1475265bc68db1d5d0e2ad924c8e7b877e0eca462d96f1a1",
+    "cctpMessageHash": "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
+    "cctpAttestationHash": "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+    "cctpNonce": "0x1111111111111111111111111111111111111111111111111111111111111111",
     "disclosureMode": "user-exported",
     "caveats": [
       "Dev proof artifact; not a production Groth16 proof.",
@@ -95,13 +126,18 @@
       "This packet is not a production view-key system and does not provide ongoing account surveillance.",
       "Packet does not reveal private keys, note secrets, recipient secrets, or allowlist witness paths.",
       "Mode A private-note-compatible handoff; no direct upstream pool credit is claimed.",
-      "User-funded Stellar deposit path is not a complete value bridge."
+      "CCTP settlement is proof-bound in the artifact, but this packet is not a legal or security audit."
     ],
     "verificationInstructions": [
       {
         "title": "Validate packet schema",
         "description": "Parse the JSON with @nebula/core AuditorPacketSchema before relying on any field.",
         "expected": "The packet has version 1, required hashes, at least one caveat, and verification instructions."
+      },
+      {
+        "title": "Confirm CCTP settlement",
+        "description": "Compare the CCTP message hash, attestation hash, and nonce against the Circle Iris message used for the Stellar mint.",
+        "expected": "The Nebula journal and auditor packet bind to the same CCTP burn/mint message."
       },
       {
         "title": "Confirm source lock",

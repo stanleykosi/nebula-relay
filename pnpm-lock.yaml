@@ -67,6 +67,19 @@ importers:
         specifier: 4.0.16
         version: 4.0.16(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)
 
+  packages/cctp-client:
+    dependencies:
+      '@stellar/stellar-sdk':
+        specifier: ^16.0.1
+        version: 16.0.1
+      viem:
+        specifier: ^2.53.1
+        version: 2.53.1(typescript@6.0.3)(zod@4.2.1)
+    devDependencies:
+      vitest:
+        specifier: 4.0.16
+        version: 4.0.16(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)
+
   packages/core:
     dependencies:
       zod:

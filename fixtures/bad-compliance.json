@@ -15,6 +15,14 @@
   "complianceRoot": "0x9999999999999999999999999999999999999999999999999999999999999999",
   "complianceMode": "allowlist-membership",
   "destinationChainId": 1501,
+  "cctpSettlement": {
+    "sourceDomain": 0,
+    "destinationDomain": 27,
+    "nonce": "0x1111111111111111111111111111111111111111111111111111111111111111",
+    "messageHash": "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
+    "attestationHash": "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+    "mintRecipient": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
   "expected": {
     "sourceChainId": 11155111,
     "escrowContract": "0x1111111111111111111111111111111111111111",
@@ -24,7 +32,10 @@
     "complianceRoot": "0x9999999999999999999999999999999999999999999999999999999999999999",
     "destinationChainId": 1501,
     "networkDomain": "0x4e4542554c415f5354454c4c41525f544553544e45545f563100000000000000",
-    "expiresAtLedger": 999999
+    "expiresAtLedger": 999999,
+    "cctpSourceDomain": 0,
+    "cctpDestinationDomain": 27,
+    "cctpMintRecipient": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   },
   "complianceWitness": {
     "valid": false,

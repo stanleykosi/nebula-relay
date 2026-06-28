@@ -5,10 +5,13 @@
   "sourceLogIndex": 0,
   "stellarClaimTxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "noteCommitment": "0x7777777777777777777777777777777777777777777777777777777777777777",
-  "claimNullifier": "0x1006ef406317cfd6ea321c2cafe0db761d37f03051f4dacee869a4263b8a6e9b",
-  "eventCommitment": "0x691eacc317ed90271348ac26f7939932ebbb4783ad4254add2897b4dc758cc4b",
+  "claimNullifier": "0x8fe8ae542a9a0f38441bcb0ff0c0eef78ac1d4cb88f79089e903e767aac6aea5",
+  "eventCommitment": "0xcffa94aae89eb644f6f5563299faa1e589f277145def40e221fa1f36cc3b3f74",
   "proofImageId": "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
-  "journalDigest": "0x763a5cdc714cc36e9374a42cb7994cfc482e7808b405a92ce98fadc7ce9fb1f3",
+  "journalDigest": "0x921c0bca6bc2c66f1475265bc68db1d5d0e2ad924c8e7b877e0eca462d96f1a1",
+  "cctpMessageHash": "0x7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89",
+  "cctpAttestationHash": "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+  "cctpNonce": "0x1111111111111111111111111111111111111111111111111111111111111111",
   "disclosureMode": "user-exported",
   "caveats": [
     "Dev proof artifact; not a production Groth16 proof.",
@@ -16,13 +19,18 @@
     "This packet is not a production view-key system and does not provide ongoing account surveillance.",
     "Packet does not reveal private keys, note secrets, recipient secrets, or allowlist witness paths.",
     "Mode A private-note-compatible handoff; no direct upstream pool credit is claimed.",
-    "User-funded Stellar deposit path is not a complete value bridge."
+    "CCTP settlement is proof-bound in the artifact, but this packet is not a legal or security audit."
   ],
   "verificationInstructions": [
     {
       "title": "Validate packet schema",
       "description": "Parse the JSON with @nebula/core AuditorPacketSchema before relying on any field.",
       "expected": "The packet has version 1, required hashes, at least one caveat, and verification instructions."
+    },
+    {
+      "title": "Confirm CCTP settlement",
+      "description": "Compare the CCTP message hash, attestation hash, and nonce against the Circle Iris message used for the Stellar mint.",
+      "expected": "The Nebula journal and auditor packet bind to the same CCTP burn/mint message."
     },
     {
       "title": "Confirm source lock",

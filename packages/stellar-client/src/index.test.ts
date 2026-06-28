@@ -28,6 +28,8 @@ const claim: ClaimArgs = {
   seal: "0x4e4542554c415f4445565f5345414c5f5631",
   imageId: "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
   journal: "0x01020304",
+  cctpMessage: "0x010203040506",
+  cctpAttestation: "0x0a0b0c0d",
   poolPayload: "0x",
 };
 
@@ -40,10 +42,12 @@ const successfulSimulation = {} as SimulationResponse;
 describe("@nebula/stellar-client", () => {
   it("builds claim ScVals and a Soroban claim transaction", () => {
     const vals = claimArgsToScVals(claim);
-    expect(vals).toHaveLength(5);
+    expect(vals).toHaveLength(7);
     expect(vals[0]?.switch().name).toBe("scvAddress");
     expect(vals[1]?.switch().name).toBe("scvBytes");
     expect(vals[1]?.bytes().length).toBe(18);
+    expect(vals[4]?.bytes().length).toBe(6);
+    expect(vals[5]?.bytes().length).toBe(4);
 
     const tx = buildClaimTransaction({
       sourceAccount: sourceAccount(),
@@ -204,6 +208,9 @@ describe("@nebula/stellar-client", () => {
   it("maps NebulaRelay contract errors and invalid hex", () => {
     expect(toReadableStellarError("HostError: Error(Contract, #15)")).toBe(
       "NebulaRelay NullifierAlreadyClaimed (#15)"
+    );
+    expect(toReadableStellarError("HostError: Error(Contract, #21)")).toBe(
+      "NebulaRelay InvalidCctpSettlement (#21)"
     );
     expect(() =>
       claimArgsToScVals({

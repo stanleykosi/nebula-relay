@@ -73,6 +73,9 @@ export interface LockWitnessExpectedConfig {
   destinationChainId: number;
   networkDomain: Hex;
   expiresAtLedger: number;
+  cctpSourceDomain: number;
+  cctpDestinationDomain: number;
+  cctpMintRecipient: Hex;
 }
 
 export interface BuildLockWitnessConfig {
@@ -82,6 +85,7 @@ export interface BuildLockWitnessConfig {
   complianceRoot: Hex;
   complianceMode: ComplianceMode;
   expected: LockWitnessExpectedConfig;
+  cctpSettlement: LockWitness["cctpSettlement"];
   complianceWitnessValid?: boolean;
 }
 
@@ -233,6 +237,7 @@ export function buildLockWitnessFromReceipt(
       locked.destinationChainId,
       "destinationChainId"
     ),
+    cctpSettlement: normalizeCctpSettlement(config.cctpSettlement),
     expected: normalizeExpected(config.expected),
     complianceWitness: {
       valid: config.complianceWitnessValid ?? true,
@@ -256,6 +261,22 @@ function normalizeExpected(
     destinationChainId: expected.destinationChainId,
     networkDomain: normalizeHex32(expected.networkDomain),
     expiresAtLedger: expected.expiresAtLedger,
+    cctpSourceDomain: expected.cctpSourceDomain,
+    cctpDestinationDomain: expected.cctpDestinationDomain,
+    cctpMintRecipient: normalizeHex32(expected.cctpMintRecipient),
+  };
+}
+
+function normalizeCctpSettlement(
+  settlement: LockWitness["cctpSettlement"]
+): LockWitness["cctpSettlement"] {
+  return {
+    sourceDomain: settlement.sourceDomain,
+    destinationDomain: settlement.destinationDomain,
+    nonce: normalizeHex32(settlement.nonce),
+    messageHash: normalizeHex32(settlement.messageHash),
+    attestationHash: normalizeHex32(settlement.attestationHash),
+    mintRecipient: normalizeHex32(settlement.mintRecipient),
   };
 }
 
@@ -275,7 +296,7 @@ function normalizeAddress(address: Address): Address {
   return getAddress(address).toLowerCase() as Address;
 }
 
-function normalizeHex32(value: Hex): Hex {
+function normalizeHex32(value: string): Hex {
   return value.toLowerCase() as Hex;
 }
 
