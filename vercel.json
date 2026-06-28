@@ -2,6 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @nebula/web build",
+  "buildCommand": "pnpm --filter @nebula/core build && pnpm --filter @nebula/evm-client build && pnpm --filter @nebula/stellar-client build && pnpm --filter @nebula/web build",
   "outputDirectory": "apps/web/.next"
 }
