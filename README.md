@@ -126,6 +126,8 @@ cargo run -p nebula-host -- prove --fixture fixtures/valid-lock.json --mode dev 
 
 For the hosted Vercel deployment, use testnet/live values:
 
+`.env.example` is intentionally template-only; fill these values in Vercel project settings or ignored local files such as `.env.local`, never in git.
+
 ```env
 NEXT_PUBLIC_DEMO_MODE=live
 NEXT_PUBLIC_PROOF_MODE=remote
