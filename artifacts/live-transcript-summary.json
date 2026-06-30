@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "generatedAt": "2026-06-30T12:29:05.182Z",
+  "source": {
+    "network": "ethereum-sepolia",
+    "txHash": "0xb0f9a428685c5aa32c87041f8973461be061e94d9151c697581daea6e5f7dfca",
+    "blockNumber": 11172592,
+    "lockId": "0x152c2900424174f099c03f61c8accde2a6739c578c647307e972e95241d7df82",
+    "amountRaw": "10000000",
+    "escrow": "0x5e13760edb2d11f17cfe28507692d4d5f6605419",
+    "token": "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"
+  },
+  "cctp": {
+    "sourceDomain": 0,
+    "destinationDomain": 27,
+    "nonce": "0x82c2b766852fd4489e7fd20505e913cc1d74cd31843c57d362bf6ddc5399b06f",
+    "messageHash": "0x2f930e6cae6e26f410c0e3f1f14f71607e67e3542831e7aac24f19f3b4fc7ec3",
+    "attestationHash": "0xb83cb01abd931c1341ee9721bf4632964e25c7317ed79b934acf1422fc7735c8",
+    "minFinalityThreshold": 1000,
+    "finalityThresholdExecuted": 1000,
+    "feeExecutedRaw": "1000",
+    "netAmountRaw": "9999000",
+    "hookVersion": 0,
+    "hookRecipient": "GA6HBYGRU6TWKA6FZESB65P3UWJTWHVH7KXQ6Z2ALJVCBJXVOJRKGZKK"
+  },
+  "proof": {
+    "mode": "remote",
+    "imageId": "0x79b0ae7f3c792a2a9b2a8c3786cc7be70c1fa81e06e7f7adc33faf4c9273fe4f",
+    "journalDigest": "0x0fb29fe0836352459f9f78fbc18b73fd2df6734ce89c84cff01f8400a3a2868e",
+    "witnessHash": "0x4d16a014dbfd4a70c0dbbddab690567e3eec759190ac67fa8061426c64b3181f",
+    "boundlessRequestId": "0xe08cee819b40dea22a94dc4aa3ea679eebf5a87318ff8798"
+  },
+  "stellar": {
+    "network": "stellar-testnet",
+    "claimTxHash": "d527fb92f97eff4bd57898a2577ccee44ba45233c05df76a65a46317e88c739d",
+    "claimant": "GA6HBYGRU6TWKA6FZESB65P3UWJTWHVH7KXQ6Z2ALJVCBJXVOJRKGZKK",
+    "claimNullifier": "0x07f35395631a7838deef003975a10e7750b49924d5350b594d9bbc183f302485",
+    "noteCommitment": "0x87d3db42539c0619dc627d6f90af1c616e8fa9a973d5992b48a644d37d7355da",
+    "claimantUsdcBalanceRawAfterClaim": "99990000",
+    "relay": "CDYUCZK5MQQXOL4OZ4YRCKCZXOLUWS6GON3TK7MSIEBKWEF65LXAZWCK",
+    "verifierRouter": "CASPL2YTHEUZMBXL7573IIFSK3SXSBIUOKHDKZJVSE6QR6W6S4NRXANE",
+    "asset": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
+  },
+  "replay": {
+    "failed": true,
+    "error": "NebulaRelay NullifierAlreadyClaimed (#15)"
+  }
+}

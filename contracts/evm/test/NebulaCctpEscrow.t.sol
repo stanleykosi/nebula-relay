@@ -79,7 +79,7 @@ contract NebulaCctpEscrowTest {
     uint256 private constant MAX_FEE = 50_000;
     uint32 private constant MIN_FINALITY = 2_000;
     bytes private constant HOOK_DATA =
-        hex"0000000000000000000000000000000000000000000000000000000100000001aa";
+        hex"0000000000000000000000000000000000000000000000000000000000000001aa";
 
     function setUp() public {
         token = new MockUSDC();

@@ -8,49 +8,49 @@
   },
   "funding": {
     "fundingMode": "AvailableBalance",
-    "fundingValueEth": "0.000027432991402720",
-    "fundingValueWei": "27432991402720",
+    "fundingValueEth": "0.000031102421672596",
+    "fundingValueWei": "31102421672596",
     "marketBalanceEth": "0.000000000000000000",
     "marketBalanceWei": "0",
-    "walletBalanceEth": "0.000000000000000000",
-    "walletBalanceWei": "0"
+    "walletBalanceEth": "0.001100000000000000",
+    "walletBalanceWei": "1100000000000000"
   },
   "gas": {
     "depositGas": 51334,
     "depositGasCostEth": "0.000000308004000000",
     "depositGasCostWei": "308004000000",
     "gasPriceWei": "6000000",
-    "walletEthNeededEth": "0.000027740995402720",
-    "walletEthNeededWei": "27740995402720"
+    "walletEthNeededEth": "0.000031410425672596",
+    "walletEthNeededWei": "31410425672596"
   },
-  "generatedAt": "2026-06-30T08:34:08Z",
+  "generatedAt": "2026-06-30T09:21:25Z",
   "offer": {
     "lockCollateral": "20000000000000000000",
     "lockTimeoutSecs": 1800,
-    "maxPriceEth": "0.000027432991402720",
-    "maxPriceWei": "27432991402720",
+    "maxPriceEth": "0.000031102421672596",
+    "maxPriceWei": "31102421672596",
     "minPriceEth": "0.000000000000000000",
     "minPriceWei": "0",
     "rampUpPeriodSecs": 0,
-    "rampUpStart": 1782808467,
+    "rampUpStart": 1782811303,
     "timeoutSecs": 3600
   },
   "proofRequest": {
-    "guestCycles": 404235,
+    "guestCycles": 403162,
     "imageIdHex": "0x79b0ae7f3c792a2a9b2a8c3786cc7be70c1fa81e06e7f7adc33faf4c9273fe4f",
-    "journalDigestHex": "0x61a9c9a8c400ea8a003d40f8ccacb4ca33347f3aa1dc95c07d938759adde8fdc",
+    "journalDigestHex": "0xbf4d616beeff1148ecc596321dad6dfe214b1112fe1bbe3c48def1cf16c00480",
     "pricingNote": "offer was built by boundless-market Client::build_request using the configured deployment, Base RPC, indexer price provider, and exact Nebula witness",
     "program": "nebula-guest",
     "proofType": "raw-groth16",
-    "witnessHash": "0xb079b34b9a051ffaa53f0a44854c223c887764a85ad4ad5906e33e76af3f3c27"
+    "witnessHash": "0xaaf9c1e120ee27abbd77dde33e2b1b8ffd7e51c498eb82fd287d36c57702f5bd"
   },
   "quoteType": "boundless-sdk-dry-run",
   "request": {
-    "expiresAt": 1782812067,
+    "expiresAt": 1782814903,
     "imageUrl": "https://gateway.pinata.cloud/ipfs/bafkreiam4f5klez2mxjlxy37mgyffmgne4sxt6xyifa4m7mf62ltyymab4",
     "inputType": "Url",
-    "lockExpiresAt": 1782810267,
-    "requestId": "0xe08cee819b40dea22a94dc4aa3ea679eebf5a87343f523d9"
+    "lockExpiresAt": 1782813103,
+    "requestId": "0xe08cee819b40dea22a94dc4aa3ea679eebf5a873a8cc7218"
   },
   "version": 1,
   "warnings": []

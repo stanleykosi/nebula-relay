@@ -39,6 +39,8 @@ pub enum HostError {
     Boundless(String),
     #[error("Boundless fulfillment was not usable: {0}")]
     BoundlessFulfillment(String),
+    #[error("Boundless fulfillment recovery failed: {0}")]
+    BoundlessRecovery(String),
     #[error("RISC Zero proving failed: {0}")]
     Proving(String),
     #[error("RISC Zero seal encoding failed: {0}")]
@@ -299,6 +301,66 @@ pub fn prove_fixture_remote(
         ProofMode::Remote,
         seal,
         journal_bytes,
+        expected_journal,
+        &witness,
+    )?;
+    write_artifact(out, &artifact)?;
+    Ok(artifact)
+}
+
+pub fn recover_boundless_fixture(
+    fixture: impl AsRef<Path>,
+    fulfillment_json: impl AsRef<Path>,
+    out: impl AsRef<Path>,
+) -> Result<ProofArtifact, HostError> {
+    let (witness, expected_journal, expected_journal_bytes) = prepare_witness(fixture)?;
+    let value: Value = serde_json::from_slice(&fs::read(fulfillment_json)?)?;
+    let status = value
+        .get("request_status")
+        .and_then(Value::as_str)
+        .ok_or_else(|| HostError::BoundlessRecovery("missing request_status".to_owned()))?;
+    if status != "fulfilled" {
+        return Err(HostError::BoundlessRecovery(format!(
+            "request_status is {status}, expected fulfilled"
+        )));
+    }
+
+    let image_id = value
+        .get("image_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| HostError::BoundlessRecovery("missing image_id".to_owned()))?;
+    if strip_0x(image_id).to_ascii_lowercase()
+        != hex::encode(image_id_bytes(NEBULA_GUEST_ID)).to_ascii_lowercase()
+    {
+        return Err(HostError::BoundlessRecovery(
+            "fulfilled image ID did not match Nebula guest".to_owned(),
+        ));
+    }
+
+    if let Some(journal) = value.get("fulfill_journal").and_then(Value::as_str) {
+        let fulfilled_journal = decode_hex_field(journal, "fulfill_journal")?;
+        if fulfilled_journal != expected_journal_bytes {
+            return Err(HostError::BoundlessRecovery(
+                "fulfilled journal did not match host validation".to_owned(),
+            ));
+        }
+    }
+
+    let seal_hex = value
+        .get("fulfill_seal")
+        .and_then(Value::as_str)
+        .ok_or_else(|| HostError::BoundlessRecovery("missing fulfill_seal".to_owned()))?;
+    let seal = decode_hex_field(seal_hex, "fulfill_seal")?;
+    if seal.len() <= 4 {
+        return Err(HostError::BoundlessRecovery(
+            "fulfilled seal is too short".to_owned(),
+        ));
+    }
+
+    let artifact = build_artifact(
+        ProofMode::Remote,
+        seal,
+        expected_journal_bytes,
         expected_journal,
         &witness,
     )?;
@@ -973,6 +1035,19 @@ fn write_artifact(out: impl AsRef<Path>, artifact: &ProofArtifact) -> Result<(),
     }
     fs::write(out, serde_json::to_vec_pretty(&artifact)?)?;
     Ok(())
+}
+
+fn decode_hex_field(value: &str, field: &str) -> Result<Vec<u8>, HostError> {
+    hex::decode(strip_0x(value)).map_err(|error| {
+        HostError::BoundlessRecovery(format!("{field} was not valid hex: {error}"))
+    })
+}
+
+fn strip_0x(value: &str) -> &str {
+    value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+        .unwrap_or(value)
 }
 
 fn image_id_bytes(words: [u32; 8]) -> [u8; 32] {

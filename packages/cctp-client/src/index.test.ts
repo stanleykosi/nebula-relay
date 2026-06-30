@@ -146,7 +146,7 @@ describe("@nebula/cctp-client", () => {
       encoded[31];
 
     expect(encoded.slice(0, 24)).toEqual(new Uint8Array(24));
-    expect(version).toBe(1);
+    expect(version).toBe(0);
     expect(length).toBe(stellarRecipient.length);
     expect(String.fromCharCode(...encoded.slice(32, 32 + length))).toBe(
       stellarRecipient
@@ -161,7 +161,7 @@ describe("@nebula/cctp-client", () => {
     });
 
     expect(parseStellarForwarderHookData(hook)).toEqual({
-      version: 1,
+      version: 0,
       recipient: stellarRecipient,
       payload: "0x1234",
     });

@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use nebula_host::{
     prove_fixture, quote_boundless_fixture, quote_boundless_market_fixture,
-    quote_boundless_sdk_fixture,
+    quote_boundless_sdk_fixture, recover_boundless_fixture,
 };
 use std::path::PathBuf;
 use url::Url;
@@ -45,6 +45,14 @@ enum Command {
         fixture: PathBuf,
         #[arg(long)]
         out: Option<PathBuf>,
+    },
+    RecoverBoundless {
+        #[arg(long)]
+        fixture: PathBuf,
+        #[arg(long)]
+        fulfillment: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
     },
 }
 
@@ -99,5 +107,19 @@ fn main() {
                 serde_json::to_string_pretty(&quote).expect("quote JSON should serialize")
             );
         }
+        Command::RecoverBoundless {
+            fixture,
+            fulfillment,
+            out,
+        } => match recover_boundless_fixture(fixture, fulfillment, out) {
+            Ok(artifact) => {
+                println!("image_id={}", artifact.image_id_hex);
+                println!("journal_digest={}", artifact.journal_digest_hex);
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        },
     }
 }

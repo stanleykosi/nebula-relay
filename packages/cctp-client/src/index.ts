@@ -47,6 +47,8 @@ export const CCTP_FINALITY_THRESHOLDS = {
   standard: 2_000,
 } as const;
 
+export const STELLAR_FORWARDER_HOOK_VERSION = 0;
+
 export const CIRCLE_IRIS_API = {
   sandbox: "https://iris-api-sandbox.circle.com",
   mainnet: "https://iris-api.circle.com",
@@ -328,7 +330,10 @@ export function buildStellarForwarderHookData(params: {
   const payloadBytes = params.payload
     ? hexToBytes(normalizeHex(params.payload, "hookPayload"))
     : new Uint8Array();
-  const version = normalizeDomain(params.version ?? 1, "hookVersion");
+  const version = normalizeDomain(
+    params.version ?? STELLAR_FORWARDER_HOOK_VERSION,
+    "hookVersion"
+  );
   const header = new Uint8Array(32);
   writeU32Be(header, 24, version);
   writeU32Be(header, 28, recipientBytes.length);

@@ -10,7 +10,7 @@ Nebula Relay is a hackathon MVP that proves an approved EVM stablecoin lock happ
 EVM lock event + CCTP burn/message -> LockWitness -> RISC Zero journal/proof artifact -> Stellar CCTP settlement -> NebulaRelay claim -> private-note-compatible handoff
 ```
 
-The hosted configuration targets testnet mode. The local vertical slice binds CCTP message, attestation, nonce, and mint-recipient fields into the proof journal and requires the Stellar claim path to settle through the configured CCTP Forwarder before storing the nullifier. Fixture data remains available for UI smoke tests, but proof artifacts must be `local-groth16` or `remote`.
+The hosted configuration targets testnet mode. The live testnet transcript binds CCTP message, attestation, nonce, and mint-recipient fields into the proof journal and requires the Stellar claim path to settle through the configured CCTP Forwarder before storing the nullifier. Fixture data remains available for UI smoke tests, but proof artifacts must be `local-groth16` or `remote`.
 
 ## Why It Matters For Stellar Real-World ZK
 
@@ -65,7 +65,7 @@ Reused/reference material is documented in [docs/reused-code.md](docs/reused-cod
 - Source-chain receipt trie inclusion and finality are not implemented.
 - Private Payments composition is Mode A handoff: Nebula records a private-note-compatible commitment through an adapter boundary. It does not directly credit the upstream pool.
 - `NebulaCctpEscrow` is deployed on Ethereum Sepolia and implements the atomic source-side lock event plus CCTP burn wrapper.
-- CCTP settlement is proof-bound and enforced in deterministic local tests, but no live testnet CCTP burn/mint transcript has been submitted from this workspace.
+- CCTP settlement is proof-bound and enforced in deterministic local tests and in the completed Sepolia -> Stellar testnet transcript; see `artifacts/live-transcript-summary.json` and `IMPLEMENTATION_STATUS.md`.
 
 ## Exact Demo Commands
 
@@ -114,6 +114,14 @@ Deploy and exercise the source-side CCTP wrapper after configuring Sepolia env v
 bash scripts/deploy_evm_cctp_testnet.sh
 bash scripts/run_evm_cctp_lock_testnet.sh
 ```
+
+Run the full live Sepolia -> Stellar testnet transcript:
+
+```bash
+scripts/run_live_testnet_transcript.sh --yes
+```
+
+This command burns `NEBULA_LOCK_AMOUNT` of configured Sepolia test USDC, waits for Circle Iris, submits a Boundless remote Groth16 proof request, claims on Stellar testnet, verifies nullifier storage, verifies replay failure, and writes `artifacts/live-transcript-summary.json`.
 
 Generate the local Groth16 proof artifact:
 
@@ -190,7 +198,7 @@ bash scripts/check_testnet_readiness.sh
 
 ## Testnet Contract IDs And Source Escrow
 
-Live testnet contracts have been deployed for the source wrapper and Stellar claim path. The public burn -> Iris attestation -> Stellar `mint_and_forward` -> Nebula claim transcript is still pending.
+Live testnet contracts have been deployed for the source wrapper and Stellar claim path. A public Sepolia burn -> Circle Iris attestation -> Boundless Groth16 proof -> Stellar CCTP `mint_and_forward` -> NebulaRelay claim -> nullifier stored -> replay failure transcript completed on June 30, 2026.
 
 | Network | Artifact | ID or address |
 |---|---|---|
@@ -203,10 +211,21 @@ Live testnet contracts have been deployed for the source wrapper and Stellar cla
 | Stellar testnet | Circle CCTP Forwarder | `CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ` |
 | Stellar testnet | Circle CCTP Message Transmitter | `CBJ6MTCKKZG73PMDZCJMSFRD7DQEMI4FKDH7CGDSV4W6FHCRBCQAVVJY` |
 | Stellar testnet | Circle CCTP Token Messenger Minter | `CDNG7HXAPBWICI2E3AUBP3YZWZELJLYSB6F5CC7WLDTLTHVM74SLRTHP` |
-| Stellar testnet | NebulaRelay | `CAXNVQPBXREPLMTWIO2IR6EWKUDTNLC3SS25SLX5IEGG27NNCAZO3EBY` |
-| Stellar testnet | RISC Zero verifier router | `CB6DYBAUGPNKNG77BBN6TUCN2E7PTFY3GSEEIYA5HVLOYFBWIE67Q6P3` |
+| Stellar testnet | NebulaRelay | `CDYUCZK5MQQXOL4OZ4YRCKCZXOLUWS6GON3TK7MSIEBKWEF65LXAZWCK` |
+| Stellar testnet | RISC Zero verifier router | `CASPL2YTHEUZMBXL7573IIFSK3SXSBIUOKHDKZJVSE6QR6W6S4NRXANE` |
+| Stellar testnet | RISC Zero Groth16 verifier | `CBWXXMAGJGYKBBVY4R2YRNY7ULFILO4L52DPXZ6JZ2757AOI6YZ5I6U5` |
+| Stellar testnet | RISC Zero verifier emergency stop | `CANRRAIOB2YNP5KTOH5JAOFPURRIFXQJZKN3MEBIZBEHTNLUAXEL6IV2` |
 | Stellar testnet | Pool adapter / handoff wrapper | `CABW53ILEK6T3HPG2CRG5NFT36HCA3QXPKU4HOPY6KCAUPLONPSKD77F` |
 | RISC Zero | Nebula guest image ID | `0x79b0ae7f3c792a2a9b2a8c3786cc7be70c1fa81e06e7f7adc33faf4c9273fe4f` |
+
+Latest live transcript:
+
+- Sepolia burn tx: `0xb0f9a428685c5aa32c87041f8973461be061e94d9151c697581daea6e5f7dfca`
+- Stellar claim tx: `d527fb92f97eff4bd57898a2577ccee44ba45233c05df76a65a46317e88c739d`
+- Claim nullifier: `0x07f35395631a7838deef003975a10e7750b49924d5350b594d9bbc183f302485`
+- Circle fee executed: `1000` raw EVM-side USDC units; net CCTP amount in the proof-side parser: `9999000`
+- Transcript summary: `artifacts/live-transcript-summary.json`
+- Repro command: `scripts/run_live_testnet_transcript.sh --yes`
 
 ## Submission Package
 
@@ -221,8 +240,8 @@ Recorded video and screenshots are not checked into this repo from the terminal 
 
 ## Security Limitations
 
-This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Boundless remote proving and verifier-router validation must be exercised in a public testnet transcript, and live CCTP testnet/mainnet validation, direct private-pool credit, governance hardening, legal review, regulatory review, and security audits are required before production deployment.
+This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Boundless remote proving, verifier-router validation, CCTP `mint_and_forward` settlement, Nebula claim storage, and replay rejection have been exercised in a live testnet transcript; direct private-pool credit, governance hardening, legal review, regulatory review, and security audits are required before production deployment.
 
 ## Production Path
 
-The testnet path replaces local fixture inputs with Boundless remote or local-Groth16 proof generation, deployed verifier-router verification, a CCTP-backed USDC claim settlement path, and configured Private Payments handoff contracts. The Stage 17 CCTP work builds the intended burn -> Circle Iris attestation -> Stellar `mint_and_forward` flow and binds that settlement transcript into the proof journal locally; the next milestone is the live public testnet transcript.
+The testnet path replaces local fixture inputs with Boundless remote or local-Groth16 proof generation, deployed verifier-router verification, a CCTP-backed USDC claim settlement path, and configured Private Payments handoff contracts. The next milestone is hardening this completed testnet transcript into hosted Railway/Vercel orchestration with monitoring, prebuilt prover workers, receipt/finality improvements, and production controls.

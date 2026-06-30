@@ -18,7 +18,7 @@ use verifier_router::RiscZeroVerifierRouterClient;
 
 const JOURNAL_LEN: u32 = 425;
 const MAX_COMPLIANCE_MODE: u32 = 2;
-const DEMO_DESTINATION_CHAIN_ID: u64 = 1_501;
+const STELLAR_CCTP_DESTINATION_CHAIN_ID: u64 = CCTP_STELLAR_DOMAIN as u64;
 const CCTP_STELLAR_DOMAIN: u32 = 27;
 
 #[contracterror]
@@ -427,7 +427,7 @@ fn validate_journal(env: &Env, journal: &NebulaJournalV1) -> Result<(), Error> {
     if journal.domain != domain {
         return Err(Error::InvalidDomain);
     }
-    if journal.destination_chain_id != DEMO_DESTINATION_CHAIN_ID {
+    if journal.destination_chain_id != STELLAR_CCTP_DESTINATION_CHAIN_ID {
         return Err(Error::WrongDestination);
     }
 
