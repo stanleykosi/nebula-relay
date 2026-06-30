@@ -1,0 +1,15 @@
+[submodule "vendor/openzeppelin-stellar-contracts"]
+	path = vendor/openzeppelin-stellar-contracts
+	url = https://github.com/OpenZeppelin/stellar-contracts
+
+[submodule "vendor/soroban-security-detectors-sdk"]
+	path = vendor/soroban-security-detectors-sdk
+	url = https://github.com/OpenZeppelin/soroban-security-detectors-sdk
+
+[submodule "vendor/stellar-private-payments"]
+	path = vendor/stellar-private-payments
+	url = https://github.com/NethermindEth/stellar-private-payments
+
+[submodule "vendor/stellar-risc0-verifier"]
+	path = vendor/stellar-risc0-verifier
+	url = https://github.com/NethermindEth/stellar-risc0-verifier
