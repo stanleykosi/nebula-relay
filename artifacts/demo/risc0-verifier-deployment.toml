@@ -1,0 +1,25 @@
+# RISC Zero Stellar deployment snapshot for Nebula Relay demos.
+# Copied out of vendor/stellar-risc0-verifier/deployment.toml so local
+# deployment state stays in the Nebula repo instead of dirtying the submodule.
+
+[chains.stellar-testnet]
+name = "Stellar Testnet"
+admin = "GA6HBYGRU6TWKA6FZESB65P3UWJTWHVH7KXQ6Z2ALJVCBJXVOJRKGZKK"
+router = "CASPL2YTHEUZMBXL7573IIFSK3SXSBIUOKHDKZJVSE6QR6W6S4NRXANE"
+timelock-controller = "CBH4MSM7DIA3Z2X4U4ZJAF3YOSQ2XU3BF2S7Y4TF7SCZ6352BQF5542C"
+timelock-delay = 0
+
+[[chains.stellar-testnet.verifiers]]
+name = "groth16-verifier"
+version = "3.0.0"
+selector = "73c457ba"
+verifier = "CBWXXMAGJGYKBBVY4R2YRNY7ULFILO4L52DPXZ6JZ2757AOI6YZ5I6U5"
+estop = "CANRRAIOB2YNP5KTOH5JAOFPURRIFXQJZKN3MEBIZBEHTNLUAXEL6IV2"
+unroutable = false
+
+[chains.stellar-mainnet]
+name = "Stellar Mainnet"
+admin = ""
+router = ""
+timelock-controller = ""
+timelock-delay = 604800

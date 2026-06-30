@@ -65,7 +65,7 @@ Reused/reference material is documented in [docs/reused-code.md](docs/reused-cod
 - Source-chain receipt trie inclusion and finality are not implemented.
 - Private Payments composition is Mode A handoff: Nebula records a private-note-compatible commitment through an adapter boundary. It does not directly credit the upstream pool.
 - `NebulaCctpEscrow` is deployed on Ethereum Sepolia and implements the atomic source-side lock event plus CCTP burn wrapper.
-- CCTP settlement is proof-bound and enforced in deterministic local tests and in the completed Sepolia -> Stellar testnet transcript; see `artifacts/live-transcript-summary.json` and `IMPLEMENTATION_STATUS.md`.
+- CCTP settlement is proof-bound and enforced in deterministic local tests and in the completed Sepolia -> Stellar testnet transcript; see `artifacts/live-transcript-summary.json`, `artifacts/demo/risc0-verifier-deployment.toml`, and `IMPLEMENTATION_STATUS.md`.
 
 ## Exact Demo Commands
 
