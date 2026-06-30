@@ -65,10 +65,10 @@ describe("Nebula schemas", () => {
     expect(() =>
       ProofArtifactSchema.parse({
         version: 1,
-        proofMode: "dev",
+        proofMode: "local-groth16",
         sealHex: "0x4e4556554c415f4445565f5345414c5f5631",
         imageIdHex:
-          "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
+          "0x4242424242424242424242424242424242424242424242424242424242424242",
         journalHex: "0x0102",
         journalDigestHex:
           "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -95,7 +95,7 @@ describe("Nebula schemas", () => {
         eventCommitment:
           "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         proofImageId:
-          "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
+          "0x4242424242424242424242424242424242424242424242424242424242424242",
         journalDigest:
           "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         cctpMessageHash:
@@ -105,7 +105,7 @@ describe("Nebula schemas", () => {
         cctpNonce:
           "0x1111111111111111111111111111111111111111111111111111111111111111",
         disclosureMode: "user-exported",
-        caveats: ["dev-mode artifact"],
+        caveats: ["local Groth16 artifact requires verifier-router validation"],
         verificationInstructions: [
           {
             title: "Validate schema",
@@ -117,8 +117,8 @@ describe("Nebula schemas", () => {
     ).not.toThrow();
   });
 
-  it("validates generated dev proof artifact when present", () => {
-    const artifactPath = resolve(root, "artifacts", "dev-proof.json");
+  it("validates generated Groth16 proof artifact when present", () => {
+    const artifactPath = resolve(root, "artifacts", "groth16-proof.json");
     if (!existsSync(artifactPath)) {
       return;
     }

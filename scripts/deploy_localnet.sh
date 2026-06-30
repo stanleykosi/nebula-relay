@@ -18,6 +18,8 @@ Required for initialization:
   RISC0_VERIFIER_ROUTER_ID       Verifier router-compatible contract ID
   POOL_ADAPTER_CONTRACT_ID       Nebula pool adapter/handoff contract ID
   STELLAR_ASSET_CONTRACT_ID      Stellar asset contract ID used by claims
+  CCTP_STELLAR_FORWARDER_ID      CCTP Forwarder-compatible contract ID
+  CCTP_STELLAR_FORWARDER_BYTES32 Forwarder contract ID encoded as bytes32
 
 Optional:
   STELLAR_SOURCE                 Stellar CLI identity (default: nebula-local)
@@ -56,14 +58,25 @@ REGISTER_FIXTURE_CONFIG="${NEBULA_REGISTER_FIXTURE_CONFIG:-1}"
 CONTRACT_ENV_PATH="$ARTIFACT_DIR/localnet-contracts.env"
 DEPLOYMENT_JSON_PATH="$ARTIFACT_DIR/localnet-deployment.json"
 
+cli_bytes() {
+  local value="$1"
+  value="${value#0x}"
+  value="${value#0X}"
+  printf "%s" "$value"
+}
+
 if [ "$DRY_RUN" = "1" ]; then
   echo "Dry run: would run stellar contract build"
   echo "Dry run: would deploy $WASM_PATH with source=$SOURCE network=$NETWORK"
   echo "Dry run: would write $CONTRACT_ENV_PATH and $DEPLOYMENT_JSON_PATH"
-  if [ -z "${RISC0_VERIFIER_ROUTER_ID:-}" ] || [ -z "${POOL_ADAPTER_CONTRACT_ID:-}" ] || [ -z "${STELLAR_ASSET_CONTRACT_ID:-}" ]; then
-    echo "Dry run: initialization would be skipped until verifier, pool adapter, and asset IDs are set."
+  if [ -z "${RISC0_VERIFIER_ROUTER_ID:-}" ] ||
+    [ -z "${POOL_ADAPTER_CONTRACT_ID:-}" ] ||
+    [ -z "${STELLAR_ASSET_CONTRACT_ID:-}" ] ||
+    [ -z "${CCTP_STELLAR_FORWARDER_ID:-}" ] ||
+    [ -z "${CCTP_STELLAR_FORWARDER_BYTES32:-}" ]; then
+    echo "Dry run: initialization would be skipped until verifier, pool adapter, asset, CCTP Forwarder, and CCTP mint-recipient bytes32 values are set."
   else
-    echo "Dry run: would initialize NebulaRelay with configured verifier, pool adapter, and asset IDs."
+    echo "Dry run: would initialize NebulaRelay with configured verifier, pool adapter, asset, and CCTP settlement IDs."
   fi
   exit 0
 fi
@@ -105,8 +118,12 @@ initialized="false"
 registered_fixture_config="false"
 blocker=""
 
-if [ -z "${RISC0_VERIFIER_ROUTER_ID:-}" ] || [ -z "${POOL_ADAPTER_CONTRACT_ID:-}" ] || [ -z "${STELLAR_ASSET_CONTRACT_ID:-}" ]; then
-  blocker="Initialization skipped: set RISC0_VERIFIER_ROUTER_ID, POOL_ADAPTER_CONTRACT_ID, and STELLAR_ASSET_CONTRACT_ID."
+if [ -z "${RISC0_VERIFIER_ROUTER_ID:-}" ] ||
+  [ -z "${POOL_ADAPTER_CONTRACT_ID:-}" ] ||
+  [ -z "${STELLAR_ASSET_CONTRACT_ID:-}" ] ||
+  [ -z "${CCTP_STELLAR_FORWARDER_ID:-}" ] ||
+  [ -z "${CCTP_STELLAR_FORWARDER_BYTES32:-}" ]; then
+  blocker="Initialization skipped: set RISC0_VERIFIER_ROUTER_ID, POOL_ADAPTER_CONTRACT_ID, STELLAR_ASSET_CONTRACT_ID, CCTP_STELLAR_FORWARDER_ID, and CCTP_STELLAR_FORWARDER_BYTES32."
   echo "$blocker"
 else
   stellar contract invoke \
@@ -118,9 +135,11 @@ else
     --admin "$admin" \
     --verifier_router "$RISC0_VERIFIER_ROUTER_ID" \
     --pool_adapter "$POOL_ADAPTER_CONTRACT_ID" \
-    --accepted_image_id "$IMAGE_ID" \
+    --cctp_forwarder "$CCTP_STELLAR_FORWARDER_ID" \
+    --cctp_mint_recipient "$(cli_bytes "$CCTP_STELLAR_FORWARDER_BYTES32")" \
+    --accepted_image_id "$(cli_bytes "$IMAGE_ID")" \
     --asset "$STELLAR_ASSET_CONTRACT_ID" \
-    --network_domain "$NETWORK_DOMAIN"
+    --network_domain "$(cli_bytes "$NETWORK_DOMAIN")"
   initialized="true"
 
   if [ "$REGISTER_FIXTURE_CONFIG" = "1" ]; then
@@ -161,11 +180,13 @@ NEBULA_ADMIN=$admin
 RISC0_VERIFIER_ROUTER_ID=${RISC0_VERIFIER_ROUTER_ID:-}
 POOL_ADAPTER_CONTRACT_ID=${POOL_ADAPTER_CONTRACT_ID:-}
 STELLAR_ASSET_CONTRACT_ID=${STELLAR_ASSET_CONTRACT_ID:-}
+CCTP_STELLAR_FORWARDER_ID=${CCTP_STELLAR_FORWARDER_ID:-}
+CCTP_STELLAR_FORWARDER_BYTES32=${CCTP_STELLAR_FORWARDER_BYTES32:-}
 NEBULA_IMAGE_ID=$IMAGE_ID
 NEBULA_NETWORK_DOMAIN=$NETWORK_DOMAIN
 EOF
 
-node - "$DEPLOYMENT_JSON_PATH" "$contract_id" "$NETWORK" "$SOURCE" "$admin" "$initialized" "$registered_fixture_config" "$blocker" <<'NODE'
+node - "$DEPLOYMENT_JSON_PATH" "$contract_id" "$NETWORK" "$SOURCE" "$admin" "$initialized" "$registered_fixture_config" "$blocker" "${RISC0_VERIFIER_ROUTER_ID:-}" "${POOL_ADAPTER_CONTRACT_ID:-}" "${STELLAR_ASSET_CONTRACT_ID:-}" "${CCTP_STELLAR_FORWARDER_ID:-}" "${CCTP_STELLAR_FORWARDER_BYTES32:-}" <<'NODE'
 const fs = require("fs");
 const [
   path,
@@ -176,6 +197,11 @@ const [
   initialized,
   registeredFixtureConfig,
   blocker,
+  verifierRouter,
+  poolAdapter,
+  asset,
+  cctpForwarder,
+  cctpMintRecipient,
 ] = process.argv.slice(2);
 fs.writeFileSync(
   path,
@@ -187,7 +213,12 @@ fs.writeFileSync(
       source,
       contracts: {
         nebulaRelay: contractId,
+        verifierRouter,
+        poolAdapter,
+        asset,
+        cctpForwarder,
       },
+      cctpMintRecipient,
       admin,
       initialized: initialized === "true",
       registeredFixtureConfig: registeredFixtureConfig === "true",

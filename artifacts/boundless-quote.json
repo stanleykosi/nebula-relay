@@ -1,0 +1,113 @@
+{
+  "bufferPercent": 125,
+  "funding": {
+    "chainId": 11155111,
+    "marketBalanceEth": "0.030000000000000000",
+    "marketBalanceWei": "30000000000000000",
+    "marketShortfallForP99Eth": "0.000000000000000000",
+    "marketShortfallForP99Wei": "0",
+    "note": "FundingMode::AvailableBalance will only send the market shortfall; the wallet still needs normal transaction gas.",
+    "requestor": "0xE08Cee819b40DeA22A94dC4aa3Ea679EeBf5A873",
+    "walletBalanceEth": "0.508452875162077321",
+    "walletBalanceWei": "508452875162077321",
+    "walletTopupRequiredEth": "0.000000000000000000",
+    "walletTopupRequiredWei": "0"
+  },
+  "gasReserveEth": "0.005000000000000000",
+  "gasReserveWei": "5000000000000000",
+  "generatedAt": "2026-06-30T02:05:54Z",
+  "guestCycles": 404235,
+  "imageIdHex": "0x79b0ae7f3c792a2a9b2a8c3786cc7be70c1fa81e06e7f7adc33faf4c9273fe4f",
+  "indexerUrlTried": "https://d3jjbcwhlw21k7.cloudfront.net/",
+  "journalDigestHex": "0x61a9c9a8c400ea8a003d40f8ccacb4ca33347f3aa1dc95c07d938759adde8fdc",
+  "marketBlocksScanned": 250,
+  "percentiles": {
+    "p10": {
+      "bufferedEth": "0.000000050529375000",
+      "bufferedWei": "50529375000",
+      "pricePerCycleWei": "100000",
+      "rawEth": "0.000000040423500000",
+      "rawWei": "40423500000",
+      "totalWithGasReserveEth": "0.005000050529375000",
+      "totalWithGasReserveWei": "5000050529375000"
+    },
+    "p25": {
+      "bufferedEth": "0.000000050529375000",
+      "bufferedWei": "50529375000",
+      "pricePerCycleWei": "100000",
+      "rawEth": "0.000000040423500000",
+      "rawWei": "40423500000",
+      "totalWithGasReserveEth": "0.005000050529375000",
+      "totalWithGasReserveWei": "5000050529375000"
+    },
+    "p50": {
+      "bufferedEth": "0.000000050529375000",
+      "bufferedWei": "50529375000",
+      "pricePerCycleWei": "100000",
+      "rawEth": "0.000000040423500000",
+      "rawWei": "40423500000",
+      "totalWithGasReserveEth": "0.005000050529375000",
+      "totalWithGasReserveWei": "5000050529375000"
+    },
+    "p75": {
+      "bufferedEth": "0.000000050529375000",
+      "bufferedWei": "50529375000",
+      "pricePerCycleWei": "100000",
+      "rawEth": "0.000000040423500000",
+      "rawWei": "40423500000",
+      "totalWithGasReserveEth": "0.005000050529375000",
+      "totalWithGasReserveWei": "5000050529375000"
+    },
+    "p90": {
+      "bufferedEth": "0.000000050529375000",
+      "bufferedWei": "50529375000",
+      "pricePerCycleWei": "100000",
+      "rawEth": "0.000000040423500000",
+      "rawWei": "40423500000",
+      "totalWithGasReserveEth": "0.005000050529375000",
+      "totalWithGasReserveWei": "5000050529375000"
+    },
+    "p95": {
+      "bufferedEth": "0.000000050529375000",
+      "bufferedWei": "50529375000",
+      "pricePerCycleWei": "100000",
+      "rawEth": "0.000000040423500000",
+      "rawWei": "40423500000",
+      "totalWithGasReserveEth": "0.005000050529375000",
+      "totalWithGasReserveWei": "5000050529375000"
+    },
+    "p99": {
+      "bufferedEth": "0.000000050529375000",
+      "bufferedWei": "50529375000",
+      "pricePerCycleWei": "100000",
+      "rawEth": "0.000000040423500000",
+      "rawWei": "40423500000",
+      "totalWithGasReserveEth": "0.005000050529375000",
+      "totalWithGasReserveWei": "5000050529375000"
+    }
+  },
+  "pricingSource": "static-fallback",
+  "quoteType": "boundless-remote-proof",
+  "recommendedOffer": {
+    "env": {
+      "BOUNDLESS_LOCK_TIMEOUT_SECS": "1800",
+      "BOUNDLESS_MAX_PRICE": "0.005000050529375000 ETH",
+      "BOUNDLESS_MIN_PRICE": "0.005000050529375000 ETH",
+      "BOUNDLESS_RAMP_UP_PERIOD_SECS": "0",
+      "BOUNDLESS_TIMEOUT_SECS": "3600"
+    },
+    "maxPriceEth": "0.005000050529375000",
+    "maxPriceWei": "5000050529375000",
+    "minPriceEth": "0.005000050529375000",
+    "minPriceWei": "5000050529375000",
+    "strategy": "fast-testnet-p95-to-p99-zero-ramp"
+  },
+  "version": 1,
+  "warnings": [
+    "Boundless indexer pricing unavailable from https://d3jjbcwhlw21k7.cloudfront.net/: Failed to fetch market aggregates from https://d3jjbcwhlw21k7.cloudfront.net/v1/market/aggregates?aggregation=weekly&limit=1&sort=desc&before=1782785126&after=1782180326: error sending request for url (https://d3jjbcwhlw21k7.cloudfront.net/v1/market/aggregates?aggregation=weekly&limit=1&sort=desc&before=1782785126&after=1782180326): client error (Connect): dns error: failed to lookup address information: No address associated with hostname",
+    "on-chain Boundless pricing scan over 250 blocks returned no usable data: No valid market data found for pricing",
+    "on-chain Boundless pricing scan over 50 blocks returned no usable data: No valid market data found for pricing",
+    "falling back to SDK-style static price of 100000 wei/cycle"
+  ],
+  "witnessHash": "0xb079b34b9a051ffaa53f0a44854c223c887764a85ad4ad5906e33e76af3f3c27"
+}

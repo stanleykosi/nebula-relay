@@ -12,13 +12,19 @@ name = "nebula-host"
 path = "src/main.rs"
 
 [dependencies]
+boundless-market.workspace = true
 chrono.workspace = true
 clap.workspace = true
 hex.workspace = true
 nebula-guest = { path = "../nebula-guest" }
+nebula-methods = { path = "../methods" }
 nebula-risc0-shared = { path = "../shared" }
+risc0-ethereum-contracts.workspace = true
+risc0-zkvm = { workspace = true, features = ["prove", "disable-dev-mode"] }
 serde_json.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+url.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

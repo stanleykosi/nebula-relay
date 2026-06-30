@@ -9,8 +9,8 @@ import { buildLockWitnessFromReceipt } from "@nebula/evm-client";
 import { buildAuditorPacket } from "./auditor";
 import type { DemoConfig } from "./config";
 import {
-  devProofArtifact,
   invalidTokenWitness,
+  testnetProofArtifact,
   validLockWitness,
   validReceipt,
 } from "./fixtures";
@@ -87,7 +87,7 @@ export const demoSteps: DemoStep[] = [
   {
     id: "proof",
     title: "Generate proof artifact",
-    caption: "Dev fixture binds seal, image ID, journal, and digest.",
+    caption: "Groth16 artifact binds seal, image ID, journal, and digest.",
   },
   {
     id: "cctp",
@@ -213,7 +213,7 @@ export function generateFixtureProof(state: DemoState): DemoState {
   return completeStep(
     {
       ...state,
-      proof: ProofArtifactSchema.parse(devProofArtifact),
+      proof: ProofArtifactSchema.parse(testnetProofArtifact),
     },
     "proof"
   );
@@ -284,7 +284,7 @@ export function showPrivateNoteHandoff(state: DemoState): DemoState {
 
 export function exportAuditorPacket(state: DemoState): DemoState {
   const witness = state.witness ?? LockWitnessSchema.parse(validLockWitness);
-  const proof = state.proof ?? ProofArtifactSchema.parse(devProofArtifact);
+  const proof = state.proof ?? ProofArtifactSchema.parse(testnetProofArtifact);
   return completeStep(
     {
       ...state,

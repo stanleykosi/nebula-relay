@@ -5,7 +5,7 @@ import {
   REQUIRED_AUDITOR_CAVEATS,
 } from "@/lib/auditor";
 import { demoConfig } from "@/lib/config";
-import { devProofArtifact, validLockWitness } from "@/lib/fixtures";
+import { testnetProofArtifact, validLockWitness } from "@/lib/fixtures";
 
 export default function DocsPage() {
   return (
@@ -26,7 +26,7 @@ export default function DocsPage() {
             <Badge tone="ok">
               <ShieldCheck size={14} /> RISC Zero first
             </Badge>
-            <Badge tone="warn">Dev artifact in demo</Badge>
+            <Badge tone="ok">Groth16 router path</Badge>
           </div>
           <p>
             The current statement validates a structured EVM lock witness:
@@ -34,8 +34,8 @@ export default function DocsPage() {
             note commitment, event commitment, CCTP message/attestation hashes,
             mint recipient, and nullifier.
           </p>
-          <HashRow label="Image ID" value={devProofArtifact.imageIdHex} />
-          <HashRow label="Journal digest" value={devProofArtifact.journalDigestHex} />
+          <HashRow label="Image ID" value={testnetProofArtifact.imageIdHex} />
+          <HashRow label="Journal digest" value={testnetProofArtifact.journalDigestHex} />
         </Panel>
 
         <Panel title="What Stellar verifies" className="span-6">
@@ -53,7 +53,7 @@ export default function DocsPage() {
           </p>
           <HashRow
             label="Nullifier"
-            value={devProofArtifact.publicOutputs.claimNullifier}
+            value={testnetProofArtifact.publicOutputs.claimNullifier}
           />
         </Panel>
 

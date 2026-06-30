@@ -10,7 +10,7 @@ Nebula Relay is a hackathon MVP that proves an approved EVM stablecoin lock happ
 EVM lock event + CCTP burn/message -> LockWitness -> RISC Zero journal/proof artifact -> Stellar CCTP settlement -> NebulaRelay claim -> private-note-compatible handoff
 ```
 
-The hosted configuration targets testnet mode. The local vertical slice binds CCTP message, attestation, nonce, and mint-recipient fields into the proof journal and requires the Stellar claim path to settle through the configured CCTP Forwarder before storing the nullifier. Fixture artifacts remain available for local smoke tests until the live testnet contracts, prover, and relayer are attached.
+The hosted configuration targets testnet mode. The local vertical slice binds CCTP message, attestation, nonce, and mint-recipient fields into the proof journal and requires the Stellar claim path to settle through the configured CCTP Forwarder before storing the nullifier. Fixture data remains available for UI smoke tests, but proof artifacts must be `local-groth16` or `remote`.
 
 ## Why It Matters For Stellar Real-World ZK
 
@@ -27,7 +27,7 @@ The implemented RISC Zero guest/host path validates a structured `LockWitness` a
 - The witness now carries a Circle CCTP V2 message and the proof-side validator checks source domain, destination domain, nonce, destination caller, burn token, burn amount, mint recipient, message sender, max fee, and non-empty hook data.
 - Bad token, wrong escrow, bad compliance, wrong destination, malformed public outputs, wrong image ID, bad seal, wrong journal digest, and replay fixtures fail in tests.
 
-Current proof caveat: the hosted testnet configuration should use `remote` or `local-groth16` proof mode. The old local fixture artifact is still present for smoke tests and must not be used as a live testnet proof.
+Current proof posture: the hosted testnet configuration uses Boundless `remote` proof mode or `local-groth16` fallback, and the Stellar claim contract always calls the configured verifier router.
 
 ## What Runs On Stellar
 
@@ -60,12 +60,11 @@ Reused/reference material is documented in [docs/reused-code.md](docs/reused-cod
 
 ## What Is Mocked Or Relayed In The MVP
 
-- The bundled local proof artifact is for smoke tests, not the hosted testnet proof path.
+- UI fixture data is for smoke tests, not the hosted testnet proof path.
 - Local Stellar contract tests use a router-compatible harness, not a deployed Groth16 verifier stack.
-- The old dev mock verifier remains only behind the `dev-mock-verifier` feature and explicit admin toggle.
 - Source-chain receipt trie inclusion and finality are not implemented.
 - Private Payments composition is Mode A handoff: Nebula records a private-note-compatible commitment through an adapter boundary. It does not directly credit the upstream pool.
-- `NebulaCctpEscrow` implements the atomic source-side lock event plus CCTP burn wrapper, but it has not been deployed from this workspace.
+- `NebulaCctpEscrow` is deployed on Ethereum Sepolia and implements the atomic source-side lock event plus CCTP burn wrapper.
 - CCTP settlement is proof-bound and enforced in deterministic local tests, but no live testnet CCTP burn/mint transcript has been submitted from this workspace.
 
 ## Exact Demo Commands
@@ -116,10 +115,29 @@ bash scripts/deploy_evm_cctp_testnet.sh
 bash scripts/run_evm_cctp_lock_testnet.sh
 ```
 
-Generate the local smoke-test proof artifact:
+Generate the local Groth16 proof artifact:
 
 ```bash
-cargo run -p nebula-host -- prove --fixture fixtures/valid-lock.json --mode dev --out artifacts/dev-proof.json
+cargo run -p nebula-host -- prove --fixture fixtures/valid-lock.json --mode local-groth16 --out artifacts/groth16-proof.json
+```
+
+Generate a Boundless remote Groth16 proof artifact for the Railway/backend path:
+
+```bash
+export RISC0_PROVER_MODE=remote
+export BOUNDLESS_RPC_URL="https://..."
+export BOUNDLESS_PRIVATE_KEY="0x..."
+export BOUNDLESS_MARKET_CHAIN_ID=11155111
+export PINATA_JWT="..."
+cargo run -p nebula-host -- prove --fixture fixtures/valid-lock.json --mode remote --out artifacts/remote-proof.json
+```
+
+For production-like Railway runs, prefer a pre-uploaded guest ELF URL with `BOUNDLESS_PROGRAM_URL` or a storage uploader such as Pinata/S3. Boundless is a remote prover market, so do not send user secrets in the witness unless the sensitive-input flow is configured for trusted provers.
+
+The same path is wrapped for hosted jobs:
+
+```bash
+bash scripts/prove_boundless_remote.sh
 ```
 
 ## Vercel Testnet Environment
@@ -147,6 +165,21 @@ NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID=
 
 Do not add `EVM_PRIVATE_KEY`, `STELLAR_SOURCE_SECRET`, or prover API keys to browser-exposed `NEXT_PUBLIC_*` variables.
 
+For the Railway prover/relayer backend, add server-only values:
+
+```env
+RISC0_PROVER_MODE=remote
+BOUNDLESS_RPC_URL=
+BOUNDLESS_PRIVATE_KEY=
+BOUNDLESS_MARKET_CHAIN_ID=11155111
+BOUNDLESS_PROGRAM_URL=
+PINATA_JWT=
+BOUNDLESS_MAX_PRICE=
+BOUNDLESS_TIMEOUT_SECS=
+```
+
+`BOUNDLESS_PROGRAM_URL` is optional only when a storage uploader such as Pinata or S3 is configured. `BOUNDLESS_PRIVATE_KEY` must be funded on the selected Boundless request network and must never be exposed to the frontend.
+
 Deployment script dry-runs:
 
 ```bash
@@ -157,22 +190,22 @@ bash scripts/check_testnet_readiness.sh
 
 ## Testnet Contract IDs And Source Escrow
 
-No live testnet contracts are deployed from this workspace yet. The final demo uses deterministic fixture artifacts in `artifacts/demo/`.
+Live testnet contracts have been deployed for the source wrapper and Stellar claim path. The public burn -> Iris attestation -> Stellar `mint_and_forward` -> Nebula claim transcript is still pending.
 
 | Network | Artifact | ID or address |
 |---|---|---|
 | EVM fixture | NebulaEscrow | `0x1111111111111111111111111111111111111111` |
-| EVM testnet | NebulaCctpEscrow | Not deployed |
+| Ethereum Sepolia | NebulaCctpEscrow | `0x5E13760edb2D11F17cFE28507692D4d5F6605419` |
 | EVM fixture | Mock USDC token | `0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` |
-| Stellar fixture | NebulaRelay | Not deployed; contract tested locally and WASM builds |
+| Stellar fixture | NebulaRelay | Contract tested locally and WASM builds |
 | Stellar fixture | RISC Zero verifier router | Router-compatible harness in tests |
-| Stellar fixture | Pool adapter / handoff wrapper | Harness in tests; Mode A adapter ABI in contract |
+| Stellar fixture | Pool adapter / handoff wrapper | Harness in tests; Mode A adapter ABI and deployable adapter contract |
 | Stellar testnet | Circle CCTP Forwarder | `CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ` |
 | Stellar testnet | Circle CCTP Message Transmitter | `CBJ6MTCKKZG73PMDZCJMSFRD7DQEMI4FKDH7CGDSV4W6FHCRBCQAVVJY` |
 | Stellar testnet | Circle CCTP Token Messenger Minter | `CDNG7HXAPBWICI2E3AUBP3YZWZELJLYSB6F5CC7WLDTLTHVM74SLRTHP` |
-| Stellar testnet | NebulaRelay | Not deployed |
-| Stellar testnet | RISC Zero verifier router | Not configured |
-| Stellar testnet | Pool adapter / handoff wrapper | Not deployed |
+| Stellar testnet | NebulaRelay | `CDDXQVILCGQCO4S2ZARUGABF54FLF6UMSQMY57VHFC7D75GYBDNURLWD` |
+| Stellar testnet | RISC Zero verifier router | `CB6DYBAUGPNKNG77BBN6TUCN2E7PTFY3GSEEIYA5HVLOYFBWIE67Q6P3` |
+| Stellar testnet | Pool adapter / handoff wrapper | `CABW53ILEK6T3HPG2CRG5NFT36HCA3QXPKU4HOPY6KCAUPLONPSKD77F` |
 
 ## Submission Package
 
@@ -187,8 +220,8 @@ Recorded video and screenshots are not checked into this repo from the terminal 
 
 ## Security Limitations
 
-This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Real Groth16 verification, live CCTP testnet/mainnet validation, direct private-pool credit, governance hardening, legal review, regulatory review, and security audits are required before production deployment.
+This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Boundless remote proving and verifier-router validation must be exercised in a public testnet transcript, and live CCTP testnet/mainnet validation, direct private-pool credit, governance hardening, legal review, regulatory review, and security audits are required before production deployment.
 
 ## Production Path
 
-The testnet path replaces local fixture inputs with remote or local-Groth16 proof generation, deployed verifier-router verification, a CCTP-backed USDC claim settlement path, and configured Private Payments handoff contracts. The Stage 17 CCTP work builds the intended burn -> Circle Iris attestation -> Stellar `mint_and_forward` flow and binds that settlement transcript into the proof journal locally; the next milestone is the live public testnet transcript.
+The testnet path replaces local fixture inputs with Boundless remote or local-Groth16 proof generation, deployed verifier-router verification, a CCTP-backed USDC claim settlement path, and configured Private Payments handoff contracts. The Stage 17 CCTP work builds the intended burn -> Circle Iris attestation -> Stellar `mint_and_forward` flow and binds that settlement transcript into the proof journal locally; the next milestone is the live public testnet transcript.

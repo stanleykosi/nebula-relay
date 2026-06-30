@@ -1,7 +1,9 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env,
+    auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
+    contract, contracterror, contractimpl, contracttype, vec, Address, Bytes, BytesN, Env, IntoVal,
+    Symbol,
 };
 
 mod cctp_forwarder;
@@ -16,8 +18,6 @@ use verifier_router::RiscZeroVerifierRouterClient;
 
 const JOURNAL_LEN: u32 = 425;
 const MAX_COMPLIANCE_MODE: u32 = 2;
-#[cfg(feature = "dev-mock-verifier")]
-const DEV_SEAL_PREFIX: &[u8; 18] = b"NEBULA_DEV_SEAL_V1";
 const DEMO_DESTINATION_CHAIN_ID: u64 = 1_501;
 const CCTP_STELLAR_DOMAIN: u32 = 27;
 
@@ -125,7 +125,6 @@ enum DataKey {
     Asset,
     NetworkDomain,
     Paused,
-    DevMockVerifierEnabled,
     Source(u64, BytesN<20>, BytesN<20>),
     ComplianceRoot(BytesN<32>, u32),
     Claimed(BytesN<32>),
@@ -182,10 +181,6 @@ impl NebulaRelay {
             .instance()
             .set(&DataKey::NetworkDomain, &network_domain);
         env.storage().instance().set(&DataKey::Paused, &false);
-        #[cfg(feature = "dev-mock-verifier")]
-        env.storage()
-            .instance()
-            .set(&DataKey::DevMockVerifierEnabled, &false);
         Ok(())
     }
 
@@ -340,15 +335,6 @@ impl NebulaRelay {
         env.storage().instance().set(&DataKey::Paused, &false);
         Ok(())
     }
-
-    #[cfg(feature = "dev-mock-verifier")]
-    pub fn set_dev_mock_verifier(env: Env, admin: Address, enabled: bool) -> Result<(), Error> {
-        require_admin(&env, &admin)?;
-        env.storage()
-            .instance()
-            .set(&DataKey::DevMockVerifierEnabled, &enabled);
-        Ok(())
-    }
 }
 
 fn require_admin(env: &Env, provided: &Address) -> Result<(), Error> {
@@ -388,18 +374,6 @@ fn verify_proof(
 
     let journal_digest: BytesN<32> = env.crypto().sha256(journal).into();
 
-    #[cfg(feature = "dev-mock-verifier")]
-    {
-        let dev_enabled = env
-            .storage()
-            .instance()
-            .get(&DataKey::DevMockVerifierEnabled)
-            .unwrap_or(false);
-        if dev_enabled {
-            return verify_dev_mock(env, seal, &journal_digest);
-        }
-    }
-
     let router_address: Address = env
         .storage()
         .instance()
@@ -410,26 +384,6 @@ fn verify_proof(
         .try_verify(seal, image_id, &journal_digest)
         .map_err(|_| Error::InvalidProof)?
         .map_err(|_| Error::VerifierRouterFailed)?;
-    Ok(())
-}
-
-#[cfg(feature = "dev-mock-verifier")]
-fn verify_dev_mock(env: &Env, seal: &Bytes, journal_digest: &BytesN<32>) -> Result<(), Error> {
-    let prefix_len = DEV_SEAL_PREFIX.len() as u32;
-    if seal.len() != prefix_len + 32 {
-        return Err(Error::InvalidProof);
-    }
-    let expected_prefix = Bytes::from_array(env, DEV_SEAL_PREFIX);
-    if seal.slice(0..prefix_len) != expected_prefix {
-        return Err(Error::InvalidProof);
-    }
-    let seal_digest: BytesN<32> = seal
-        .slice(prefix_len..prefix_len + 32)
-        .try_into()
-        .map_err(|_| Error::InvalidProof)?;
-    if seal_digest != *journal_digest {
-        return Err(Error::InvalidProof);
-    }
     Ok(())
 }
 
@@ -562,6 +516,27 @@ fn handoff_private_note(
         .ok_or(Error::NotInitialized)?;
     let relay = env.current_contract_address();
     let adapter = NebulaPoolAdapterClient::new(env, &adapter_address);
+    env.authorize_as_current_contract(vec![
+        env,
+        InvokerContractAuthEntry::Contract(SubContractInvocation {
+            context: ContractContext {
+                contract: adapter_address.clone(),
+                fn_name: Symbol::new(env, "credit_note_from_relay"),
+                args: vec![
+                    env,
+                    relay.clone().into_val(env),
+                    claimant.clone().into_val(env),
+                    journal.stellar_note_commitment.clone().into_val(env),
+                    journal.amount.into_val(env),
+                    asset.clone().into_val(env),
+                    journal.claim_nullifier.clone().into_val(env),
+                    journal.event_commitment.clone().into_val(env),
+                    pool_payload.clone().into_val(env),
+                ],
+            },
+            sub_invocations: vec![env],
+        }),
+    ]);
     adapter
         .try_credit_note_from_relay(
             &relay,

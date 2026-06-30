@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "generatedAt": "2026-06-29T21:33:44.463Z",
+  "network": "testnet",
+  "source": "nebula-testnet",
+  "contracts": {
+    "poolAdapter": "CABW53ILEK6T3HPG2CRG5NFT36HCA3QXPKU4HOPY6KCAUPLONPSKD77F"
+  },
+  "admin": "GA6HBYGRU6TWKA6FZESB65P3UWJTWHVH7KXQ6Z2ALJVCBJXVOJRKGZKK",
+  "initialized": true
+}

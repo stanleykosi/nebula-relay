@@ -4,8 +4,6 @@ use std::{fs, path::Path};
 use thiserror::Error;
 
 pub const JOURNAL_VERSION: u32 = 1;
-pub const DEV_IMAGE_ID: [u8; 32] = *b"NEBULA_DEV_IMAGE_ID_V1\0\0\0\0\0\0\0\0\0\0";
-pub const DEV_SEAL_PREFIX: &[u8] = b"NEBULA_DEV_SEAL_V1";
 
 #[derive(Debug, Error)]
 pub enum NebulaError {
@@ -129,8 +127,6 @@ pub struct NebulaJournal {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum ProofMode {
-    #[serde(rename = "dev")]
-    Dev,
     #[serde(rename = "local-groth16")]
     LocalGroth16,
     #[serde(rename = "remote")]
@@ -329,17 +325,6 @@ pub fn witness_hash(witness: &LockWitness) -> Result<[u8; 32], NebulaError> {
     Ok(Sha256::digest(serde_json::to_vec(witness)?).into())
 }
 
-pub fn dev_seal(journal_digest: &[u8; 32]) -> Vec<u8> {
-    let mut seal = Vec::with_capacity(DEV_SEAL_PREFIX.len() + journal_digest.len());
-    seal.extend_from_slice(DEV_SEAL_PREFIX);
-    seal.extend_from_slice(journal_digest);
-    seal
-}
-
-pub fn image_id_hex() -> String {
-    to_hex_32(&DEV_IMAGE_ID)
-}
-
 pub fn bytes_to_hex(bytes: &[u8]) -> String {
     format!("0x{}", hex::encode(bytes))
 }
@@ -393,7 +378,9 @@ fn validate_cctp_v2_message(
     let source_domain = read_u32_be(message, 4)?;
     let destination_domain = read_u32_be(message, 8)?;
     if source_domain != expected_source_domain {
-        return Err(NebulaError::Validation("CCTP message source domain mismatch"));
+        return Err(NebulaError::Validation(
+            "CCTP message source domain mismatch",
+        ));
     }
     if destination_domain != expected_destination_domain {
         return Err(NebulaError::Validation(
@@ -425,10 +412,14 @@ fn validate_cctp_v2_message(
     }
     let max_fee = read_u256_as_u128(message, body + 132)?;
     if max_fee >= amount {
-        return Err(NebulaError::Validation("CCTP max fee must be less than amount"));
+        return Err(NebulaError::Validation(
+            "CCTP max fee must be less than amount",
+        ));
     }
     if read_u32_be(message, 140)? == 0 {
-        return Err(NebulaError::Validation("CCTP min finality threshold is zero"));
+        return Err(NebulaError::Validation(
+            "CCTP min finality threshold is zero",
+        ));
     }
     Ok(())
 }
@@ -579,15 +570,5 @@ mod tests {
         let mut witness = load_witness(fixture("valid-lock.json")).unwrap();
         witness.amount = "90000000".to_owned();
         assert!(validate_witness(&witness).is_err());
-    }
-
-    #[test]
-    fn dev_seal_binds_digest() {
-        let witness = load_witness(fixture("valid-lock.json")).unwrap();
-        let journal = validate_witness(&witness).unwrap();
-        let digest = journal_digest(&encode_journal(&journal).unwrap());
-        let seal = dev_seal(&digest);
-        assert!(seal.starts_with(DEV_SEAL_PREFIX));
-        assert_eq!(&seal[DEV_SEAL_PREFIX.len()..], &digest);
     }
 }

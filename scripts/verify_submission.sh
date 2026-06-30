@@ -33,7 +33,6 @@ validateProof(proof);
 validateAuditorPacket(packet);
 assertProofMatchesWitness(witness, proof);
 assertPacketMatchesWitnessAndProof(packet, witness, proof);
-validateDevSealIfNeeded(proof);
 validateJournalDigest(proof);
 validateFixtureFailures(submission);
 
@@ -131,8 +130,9 @@ function validateCctpSettlement(value, label) {
 
 function validateProof(value) {
   assert(value.version === 1, "proof.version must be 1");
-  assert(["dev", "local-groth16", "remote"].includes(value.proofMode), "proofMode invalid");
+  assert(["local-groth16", "remote"].includes(value.proofMode), "proofMode invalid");
   assert(isHexBytes(value.sealHex), "proof.sealHex invalid");
+  assert((value.sealHex.length - 2) / 2 > 4, "proof.sealHex must include a verifier selector and proof bytes");
   assert(isHex(value.imageIdHex, 32), "proof.imageIdHex invalid");
   assert(isHexBytes(value.journalHex), "proof.journalHex invalid");
   assert((value.journalHex.length - 2) / 2 === 425, "proof.journalHex must encode 425 bytes");
@@ -254,25 +254,6 @@ function assertPacketMatchesWitnessAndProof(packet, witness, proof) {
     proof.publicOutputs.cctpAttestationHash
   );
   assertEqual("packet.cctpNonce", packet.cctpNonce, proof.publicOutputs.cctpNonce);
-  if (proof.proofMode === "dev") {
-    assert(
-      packet.caveats.some((caveat) =>
-        caveat.toLowerCase().includes("not a production groth16 proof")
-      ),
-      "dev proof caveat missing"
-    );
-  }
-}
-
-function validateDevSealIfNeeded(proof) {
-  if (proof.proofMode !== "dev") {
-    return;
-  }
-  const prefixHex = Buffer.from("NEBULA_DEV_SEAL_V1", "utf8").toString("hex");
-  assert(
-    proof.sealHex.toLowerCase() === `0x${prefixHex}${proof.journalDigestHex.slice(2).toLowerCase()}`,
-    "dev seal must be NEBULA_DEV_SEAL_V1 || journalDigest"
-  );
 }
 
 function validateJournalDigest(proof) {

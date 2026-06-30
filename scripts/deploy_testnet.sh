@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_DIR="${NEBULA_ARTIFACT_DIR:-$ROOT_DIR/artifacts/demo}"
 WASM_PATH="${NEBULA_RELAY_WASM:-$ROOT_DIR/target/wasm32v1-none/release/nebula_relay_contract.wasm}"
 NETWORK="${STELLAR_NETWORK:-testnet}"
-SOURCE="${STELLAR_SOURCE:-nebula-testnet}"
+SOURCE="${STELLAR_SOURCE:-}"
 DRY_RUN=0
 
 usage() {
@@ -19,6 +19,8 @@ Required for a complete initialized deployment:
   RISC0_VERIFIER_ROUTER_ID       Deployed Nethermind RISC Zero verifier router ID
   POOL_ADAPTER_CONTRACT_ID       Nebula private-payments handoff adapter ID
   STELLAR_ASSET_CONTRACT_ID      Stellar asset contract ID used by claims
+  CCTP_STELLAR_FORWARDER_ID      Circle Stellar CCTP Forwarder contract ID
+  CCTP_STELLAR_FORWARDER_BYTES32 Circle Forwarder contract ID encoded as bytes32
 
 Optional:
   STELLAR_NETWORK                Stellar CLI network (default: testnet)
@@ -57,14 +59,26 @@ NETWORK_DOMAIN="${NEBULA_NETWORK_DOMAIN:-0x4e4542554c415f5354454c4c41525f5445535
 CONTRACT_ENV_PATH="$ARTIFACT_DIR/testnet-contracts.env"
 DEPLOYMENT_JSON_PATH="$ARTIFACT_DIR/testnet-deployment.json"
 
+cli_bytes() {
+  local value="$1"
+  value="${value#0x}"
+  value="${value#0X}"
+  printf "%s" "$value"
+}
+
 if [ "$DRY_RUN" = "1" ]; then
   echo "Dry run: would run stellar contract build"
-  echo "Dry run: would deploy $WASM_PATH with source=$SOURCE network=$NETWORK"
+  echo "Dry run: would deploy $WASM_PATH with source=${SOURCE:-<unset>} network=$NETWORK"
   echo "Dry run: would write $CONTRACT_ENV_PATH and $DEPLOYMENT_JSON_PATH"
-  if [ -z "${RISC0_VERIFIER_ROUTER_ID:-}" ] || [ -z "${POOL_ADAPTER_CONTRACT_ID:-}" ] || [ -z "${STELLAR_ASSET_CONTRACT_ID:-}" ]; then
-    echo "Dry run: initialized testnet deployment requires router, pool adapter, and asset IDs."
+  if [ -z "$SOURCE" ] ||
+    [ -z "${RISC0_VERIFIER_ROUTER_ID:-}" ] ||
+    [ -z "${POOL_ADAPTER_CONTRACT_ID:-}" ] ||
+    [ -z "${STELLAR_ASSET_CONTRACT_ID:-}" ] ||
+    [ -z "${CCTP_STELLAR_FORWARDER_ID:-}" ] ||
+    [ -z "${CCTP_STELLAR_FORWARDER_BYTES32:-}" ]; then
+    echo "Dry run: initialized testnet deployment requires source, router, pool adapter, asset, CCTP Forwarder, and CCTP mint-recipient bytes32 values."
   else
-    echo "Dry run: would initialize NebulaRelay with configured verifier, pool adapter, and asset IDs."
+    echo "Dry run: would initialize NebulaRelay with configured verifier, pool adapter, asset, and CCTP settlement IDs."
   fi
   exit 0
 fi
@@ -74,8 +88,13 @@ if ! command -v stellar >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ -z "${RISC0_VERIFIER_ROUTER_ID:-}" ] || [ -z "${POOL_ADAPTER_CONTRACT_ID:-}" ] || [ -z "${STELLAR_ASSET_CONTRACT_ID:-}" ]; then
-  echo "Blocker: testnet deploy requires RISC0_VERIFIER_ROUTER_ID, POOL_ADAPTER_CONTRACT_ID, and STELLAR_ASSET_CONTRACT_ID." >&2
+if [ -z "$SOURCE" ] ||
+  [ -z "${RISC0_VERIFIER_ROUTER_ID:-}" ] ||
+  [ -z "${POOL_ADAPTER_CONTRACT_ID:-}" ] ||
+  [ -z "${STELLAR_ASSET_CONTRACT_ID:-}" ] ||
+  [ -z "${CCTP_STELLAR_FORWARDER_ID:-}" ] ||
+  [ -z "${CCTP_STELLAR_FORWARDER_BYTES32:-}" ]; then
+  echo "Blocker: testnet deploy requires STELLAR_SOURCE, RISC0_VERIFIER_ROUTER_ID, POOL_ADAPTER_CONTRACT_ID, STELLAR_ASSET_CONTRACT_ID, CCTP_STELLAR_FORWARDER_ID, and CCTP_STELLAR_FORWARDER_BYTES32." >&2
   exit 1
 fi
 
@@ -116,9 +135,20 @@ stellar contract invoke \
   --admin "$admin" \
   --verifier_router "$RISC0_VERIFIER_ROUTER_ID" \
   --pool_adapter "$POOL_ADAPTER_CONTRACT_ID" \
-  --accepted_image_id "$IMAGE_ID" \
+  --cctp_forwarder "$CCTP_STELLAR_FORWARDER_ID" \
+  --cctp_mint_recipient "$(cli_bytes "$CCTP_STELLAR_FORWARDER_BYTES32")" \
+  --accepted_image_id "$(cli_bytes "$IMAGE_ID")" \
   --asset "$STELLAR_ASSET_CONTRACT_ID" \
-  --network_domain "$NETWORK_DOMAIN"
+  --network_domain "$(cli_bytes "$NETWORK_DOMAIN")"
+
+stellar contract invoke \
+  --id "$POOL_ADAPTER_CONTRACT_ID" \
+  --source "$SOURCE" \
+  --network "$NETWORK" \
+  -- \
+  set_relay \
+  --admin "$admin" \
+  --relay "$contract_id"
 
 cat > "$CONTRACT_ENV_PATH" <<EOF
 STELLAR_NETWORK=$NETWORK
@@ -128,13 +158,26 @@ NEBULA_ADMIN=$admin
 RISC0_VERIFIER_ROUTER_ID=$RISC0_VERIFIER_ROUTER_ID
 POOL_ADAPTER_CONTRACT_ID=$POOL_ADAPTER_CONTRACT_ID
 STELLAR_ASSET_CONTRACT_ID=$STELLAR_ASSET_CONTRACT_ID
+CCTP_STELLAR_FORWARDER_ID=$CCTP_STELLAR_FORWARDER_ID
+CCTP_STELLAR_FORWARDER_BYTES32=$CCTP_STELLAR_FORWARDER_BYTES32
 NEBULA_IMAGE_ID=$IMAGE_ID
 NEBULA_NETWORK_DOMAIN=$NETWORK_DOMAIN
 EOF
 
-node - "$DEPLOYMENT_JSON_PATH" "$contract_id" "$NETWORK" "$SOURCE" "$admin" <<'NODE'
+node - "$DEPLOYMENT_JSON_PATH" "$contract_id" "$NETWORK" "$SOURCE" "$admin" "$RISC0_VERIFIER_ROUTER_ID" "$POOL_ADAPTER_CONTRACT_ID" "$STELLAR_ASSET_CONTRACT_ID" "$CCTP_STELLAR_FORWARDER_ID" "$CCTP_STELLAR_FORWARDER_BYTES32" <<'NODE'
 const fs = require("fs");
-const [path, contractId, network, source, admin] = process.argv.slice(2);
+const [
+  path,
+  contractId,
+  network,
+  source,
+  admin,
+  verifierRouter,
+  poolAdapter,
+  asset,
+  cctpForwarder,
+  cctpMintRecipient,
+] = process.argv.slice(2);
 fs.writeFileSync(
   path,
   `${JSON.stringify(
@@ -145,7 +188,12 @@ fs.writeFileSync(
       source,
       contracts: {
         nebulaRelay: contractId,
+        verifierRouter,
+        poolAdapter,
+        asset,
+        cctpForwarder,
       },
+      cctpMintRecipient,
       admin,
       initialized: true,
       blocker: null,

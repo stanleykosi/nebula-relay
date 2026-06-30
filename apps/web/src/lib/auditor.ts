@@ -132,11 +132,8 @@ function buildCaveats(
 }
 
 function proofModeCaveat(proofMode: ProofArtifact["proofMode"]): string {
-  if (proofMode === "dev") {
-    return "Dev proof artifact; not a production Groth16 proof.";
-  }
   if (proofMode === "local-groth16") {
-    return "Local Groth16 proof mode still requires deployment, verifier, and security review before production use.";
+    return "Local Groth16 proof mode requires the configured Stellar verifier router and matching image ID before testnet use.";
   }
   return "Remote proof mode depends on the configured prover and verifier; review prover trust and availability before production use.";
 }

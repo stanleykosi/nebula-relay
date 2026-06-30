@@ -1,5 +1,5 @@
 [package]
-name = "nebula-relay-contract"
+name = "nebula-pool-adapter-contract"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,4 @@ crate-type = ["lib", "cdylib"]
 soroban-sdk.workspace = true
 
 [dev-dependencies]
-hex.workspace = true
-nebula-risc0-shared = { path = "../../../risc0/shared" }
 soroban-sdk = { workspace = true, features = ["testutils"] }

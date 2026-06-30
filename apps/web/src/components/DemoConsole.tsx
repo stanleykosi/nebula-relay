@@ -36,7 +36,7 @@ import {
   settleFixtureCctp,
   type DemoState,
 } from "@/lib/demo";
-import { devProofArtifact, validLockWitness } from "@/lib/fixtures";
+import { testnetProofArtifact, validLockWitness } from "@/lib/fixtures";
 import {
   ActionButton,
   Badge,
@@ -155,7 +155,7 @@ export function DemoConsole() {
             </p>
             <div className="status-row">
               <Badge tone="ok">{progress}% complete</Badge>
-              <Badge tone={demoConfig.proofMode === "dev" ? "warn" : "ok"}>
+              <Badge tone={demoConfig.proofMode === "fixture" ? "warn" : "ok"}>
                 Proof: {demoConfig.proofMode}
               </Badge>
             </div>
@@ -346,7 +346,7 @@ export function DemoConsole() {
             label="Stored nullifier"
             value={
               state.nullifierStored
-                ? devProofArtifact.publicOutputs.claimNullifier
+                ? testnetProofArtifact.publicOutputs.claimNullifier
                 : undefined
             }
           />

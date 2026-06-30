@@ -90,7 +90,7 @@ export const NebulaJournalSchema = z.object({
 
 export const ProofArtifactSchema = z.object({
   version: z.literal(1),
-  proofMode: z.enum(["dev", "local-groth16", "remote"]),
+  proofMode: z.enum(["local-groth16", "remote"]),
   sealHex: HexBytesSchema,
   imageIdHex: Hex32Schema,
   journalHex: HexBytesSchema,

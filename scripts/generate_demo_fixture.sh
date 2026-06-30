@@ -4,16 +4,25 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_DIR="${NEBULA_ARTIFACT_DIR:-$ROOT_DIR/artifacts/demo}"
 WITNESS_PATH="${NEBULA_WITNESS_FIXTURE:-$ROOT_DIR/fixtures/valid-lock.json}"
-PROOF_PATH="${NEBULA_PROOF_ARTIFACT:-$ROOT_DIR/artifacts/dev-proof.json}"
+PROOF_PATH="${NEBULA_PROOF_ARTIFACT:-$ROOT_DIR/artifacts/groth16-proof.json}"
 SUBMISSION_PATH="${NEBULA_DEMO_SUBMISSION:-$ARTIFACT_DIR/demo-submission.json}"
 AUDITOR_PACKET_PATH="${NEBULA_AUDITOR_PACKET:-$ARTIFACT_DIR/auditor-packet.json}"
+PROOF_MODE="${RISC0_PROVER_MODE:-remote}"
 
 mkdir -p "$ARTIFACT_DIR"
 
 if [ ! -f "$PROOF_PATH" ]; then
   echo "Proof artifact not found at $PROOF_PATH"
-  echo "Generating a dev proof artifact from $WITNESS_PATH"
-  (cd "$ROOT_DIR" && cargo run -p nebula-host -- prove --fixture "$WITNESS_PATH" --mode dev --out "$PROOF_PATH")
+  case "$PROOF_MODE" in
+    remote|local-groth16)
+      echo "Generating a $PROOF_MODE proof artifact from $WITNESS_PATH"
+      (cd "$ROOT_DIR" && cargo run -p nebula-host -- prove --fixture "$WITNESS_PATH" --mode "$PROOF_MODE" --out "$PROOF_PATH")
+      ;;
+    *)
+      echo "Unsupported RISC0_PROVER_MODE=$PROOF_MODE; use remote or local-groth16." >&2
+      exit 1
+      ;;
+  esac
 fi
 
 node - "$WITNESS_PATH" "$PROOF_PATH" "$SUBMISSION_PATH" "$AUDITOR_PACKET_PATH" <<'NODE'
@@ -96,7 +105,7 @@ const submission = {
   mode: {
     network: "fixture",
     proofMode: proof.proofMode,
-    verifierMode: proof.proofMode === "dev" ? "mock/dev-compatible" : "real-router",
+    verifierMode: "real-router",
     privatePaymentsMode: "mode-a-handoff",
   },
   lockWitness: witness,
@@ -217,11 +226,9 @@ function assertProofMatchesWitness(witness, proof) {
 
 function buildCaveats(proofMode) {
   const proofModeCaveat =
-    proofMode === "dev"
-      ? "Dev proof artifact; not a production Groth16 proof."
-      : proofMode === "local-groth16"
-        ? "Local Groth16 proof mode still requires deployment, verifier, and security review before production use."
-        : "Remote proof mode depends on the configured prover and verifier; review prover trust and availability before production use.";
+    proofMode === "local-groth16"
+      ? "Local Groth16 proof mode requires the configured Stellar verifier router and matching image ID before testnet use."
+      : "Remote proof mode depends on the configured prover and verifier; review prover trust and availability before production use.";
   return [
     proofModeCaveat,
     "User-exported selective disclosure; the user chooses when and where to share it.",

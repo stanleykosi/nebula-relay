@@ -44,26 +44,34 @@ expect_not_env() {
 }
 
 expect_env NEXT_PUBLIC_DEMO_MODE live
-expect_not_env NEXT_PUBLIC_PROOF_MODE dev
+expect_env NEXT_PUBLIC_PROOF_MODE remote
 expect_env NEXT_PUBLIC_VERIFIER_MODE real-router
 expect_env NEXT_PUBLIC_CCTP_SETTLEMENT_MODE testnet
 expect_env ALLOW_FIXTURE_WITNESS false
-expect_env RISC0_DEV_MODE 0
+expect_env RISC0_PROVER_MODE remote
+expect_not_env RISC0_DEV_MODE 1
 
 for name in \
   SEPOLIA_RPC_URL \
   NEBULA_CCTP_ESCROW_ADDRESS \
   CCTP_TOKEN_MESSENGER_V2_ADDRESS \
   CCTP_USDC_ADDRESS \
+  CCTP_STELLAR_FORWARDER_ID \
   CCTP_STELLAR_FORWARDER_BYTES32 \
   RISC0_VERIFIER_ROUTER_ID \
   NEBULA_RELAY_CONTRACT_ID \
   STELLAR_ASSET_CONTRACT_ID \
   POOL_ADAPTER_CONTRACT_ID \
-  STELLAR_SOURCE
+  STELLAR_SOURCE \
+  BOUNDLESS_RPC_URL \
+  BOUNDLESS_PRIVATE_KEY
 do
   require_env "$name"
 done
+
+if [ -z "${BOUNDLESS_PROGRAM_URL:-}" ] && [ -z "${PINATA_JWT:-}" ] && [ -z "${S3_BUCKET:-}" ]; then
+  fail "BOUNDLESS_PROGRAM_URL, PINATA_JWT, or S3_BUCKET is required so Boundless provers can fetch the Nebula guest ELF."
+fi
 
 for command in forge cargo pnpm stellar; do
   if ! command -v "$command" >/dev/null 2>&1; then

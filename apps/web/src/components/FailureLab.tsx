@@ -1,6 +1,6 @@
 import { AlertTriangle, Ban, ShieldX, XCircle } from "lucide-react";
 import { Badge, HashRow, Panel } from "@/components/ui";
-import { devProofArtifact, invalidTokenWitness, validLockWitness } from "@/lib/fixtures";
+import { invalidTokenWitness, testnetProofArtifact, validLockWitness } from "@/lib/fixtures";
 
 const cases = [
   {
@@ -68,7 +68,7 @@ export function FailureLab() {
           <div className="span-6">
             <HashRow
               label="Replay nullifier"
-              value={devProofArtifact.publicOutputs.claimNullifier}
+              value={testnetProofArtifact.publicOutputs.claimNullifier}
             />
           </div>
         </div>

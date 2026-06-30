@@ -1,0 +1,57 @@
+{
+  "boundless": {
+    "chainId": 8453,
+    "indexerUrl": "https://d2mdvlnmyov1e1.cloudfront.net/",
+    "marketAddress": "0xFd152dADc5183870710FE54f939Eae3aB9F0fE82",
+    "orderStreamUrl": "https://base-mainnet.boundless.network",
+    "requestor": "0xE08Cee819b40DeA22A94dC4aa3Ea679EeBf5A873"
+  },
+  "funding": {
+    "fundingMode": "AvailableBalance",
+    "fundingValueEth": "0.000027523255015932",
+    "fundingValueWei": "27523255015932",
+    "marketBalanceEth": "0.000000000000000000",
+    "marketBalanceWei": "0",
+    "walletBalanceEth": "0.000000000000000000",
+    "walletBalanceWei": "0"
+  },
+  "gas": {
+    "depositGas": 51334,
+    "depositGasCostEth": "0.000000308004000000",
+    "depositGasCostWei": "308004000000",
+    "gasPriceWei": "6000000",
+    "walletEthNeededEth": "0.000027831259015932",
+    "walletEthNeededWei": "27831259015932"
+  },
+  "generatedAt": "2026-06-30T03:02:50Z",
+  "offer": {
+    "lockCollateral": "20000000000000000000",
+    "lockTimeoutSecs": 1800,
+    "maxPriceEth": "0.000027523255015932",
+    "maxPriceWei": "27523255015932",
+    "minPriceEth": "0.000000000000000000",
+    "minPriceWei": "0",
+    "rampUpPeriodSecs": 0,
+    "rampUpStart": 1782788588,
+    "timeoutSecs": 3600
+  },
+  "proofRequest": {
+    "guestCycles": 404235,
+    "imageIdHex": "0x79b0ae7f3c792a2a9b2a8c3786cc7be70c1fa81e06e7f7adc33faf4c9273fe4f",
+    "journalDigestHex": "0x61a9c9a8c400ea8a003d40f8ccacb4ca33347f3aa1dc95c07d938759adde8fdc",
+    "pricingNote": "offer was built by boundless-market Client::build_request using the configured deployment, Base RPC, indexer price provider, and exact Nebula witness",
+    "program": "nebula-guest",
+    "proofType": "raw-groth16",
+    "witnessHash": "0xb079b34b9a051ffaa53f0a44854c223c887764a85ad4ad5906e33e76af3f3c27"
+  },
+  "quoteType": "boundless-sdk-dry-run",
+  "request": {
+    "expiresAt": 1782792188,
+    "imageUrl": "https://gateway.pinata.cloud/ipfs/bafkreiam4f5klez2mxjlxy37mgyffmgne4sxt6xyifa4m7mf62ltyymab4",
+    "inputType": "Url",
+    "lockExpiresAt": 1782790388,
+    "requestId": "0xe08cee819b40dea22a94dc4aa3ea679eebf5a8732e35511f"
+  },
+  "version": 1,
+  "warnings": []
+}

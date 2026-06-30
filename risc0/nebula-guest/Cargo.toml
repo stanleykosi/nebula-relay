@@ -9,6 +9,7 @@ name = "nebula_guest"
 
 [dependencies]
 nebula-risc0-shared = { path = "../shared" }
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"] }
 
 [dev-dependencies]
 nebula-risc0-shared = { path = "../shared" }

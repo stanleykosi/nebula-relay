@@ -5,8 +5,7 @@ use super::pool_adapter::PoolAdapterError;
 use super::verifier_router::VerifierError;
 use super::*;
 use nebula_risc0_shared::{
-    encode_journal, journal_digest, load_witness, validate_witness, NebulaJournal, DEV_IMAGE_ID,
-    DEV_SEAL_PREFIX,
+    encode_journal, journal_digest, load_witness, validate_witness, NebulaJournal,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype,
@@ -14,6 +13,9 @@ use soroban_sdk::{
     Address, Bytes, Env,
 };
 use std::{borrow::ToOwned, format, string::String};
+
+const TEST_IMAGE_ID: [u8; 32] = [0x42; 32];
+const TEST_ROUTER_SEAL_PREFIX: &[u8; 19] = b"NEBULA_TEST_SEAL_V1";
 
 #[contracttype]
 #[derive(Clone)]
@@ -542,7 +544,7 @@ fn setup() -> Setup {
         &pool_adapter,
         &cctp_forwarder,
         &hex32(&env, &witness.expected.cctp_mint_recipient),
-        &BytesN::from_array(&env, &DEV_IMAGE_ID),
+        &BytesN::from_array(&env, &TEST_IMAGE_ID),
         &asset,
         &hex32(&env, &witness.expected.network_domain),
     );
@@ -584,11 +586,11 @@ fn artifact_parts(env: &Env, fixture: &str) -> (Bytes, BytesN<32>, Bytes, BytesN
     let journal_bytes = encode_journal(&journal).unwrap();
     let digest = journal_digest(&journal_bytes);
     let mut seal = std::vec::Vec::new();
-    seal.extend_from_slice(DEV_SEAL_PREFIX);
+    seal.extend_from_slice(TEST_ROUTER_SEAL_PREFIX);
     seal.extend_from_slice(&digest);
     (
         Bytes::from_slice(env, &seal),
-        BytesN::from_array(env, &DEV_IMAGE_ID),
+        BytesN::from_array(env, &TEST_IMAGE_ID),
         Bytes::from_slice(env, &journal_bytes),
         hex32(env, &journal.claim_nullifier),
     )
@@ -598,11 +600,11 @@ fn signed_journal(env: &Env, journal: &NebulaJournal) -> (Bytes, BytesN<32>, Byt
     let journal_bytes = encode_journal(journal).unwrap();
     let digest = journal_digest(&journal_bytes);
     let mut seal = std::vec::Vec::new();
-    seal.extend_from_slice(DEV_SEAL_PREFIX);
+    seal.extend_from_slice(TEST_ROUTER_SEAL_PREFIX);
     seal.extend_from_slice(&digest);
     (
         Bytes::from_slice(env, &seal),
-        BytesN::from_array(env, &DEV_IMAGE_ID),
+        BytesN::from_array(env, &TEST_IMAGE_ID),
         Bytes::from_slice(env, &journal_bytes),
     )
 }
@@ -1129,7 +1131,7 @@ fn contract_rejects_unregistered_source_and_root_from_journal() {
         &other,
         &s.cctp_forwarder,
         &hex32(&s.env, &witness.expected.cctp_mint_recipient),
-        &BytesN::from_array(&s.env, &DEV_IMAGE_ID),
+        &BytesN::from_array(&s.env, &TEST_IMAGE_ID),
         &other,
         &hex32(&s.env, &witness.expected.network_domain),
     );
@@ -1163,81 +1165,4 @@ fn paused_claim_fails() {
             &Bytes::new(&s.env),
         )
         .is_err());
-}
-
-#[cfg(feature = "dev-mock-verifier")]
-fn setup_dev_mock() -> Setup {
-    let env = Env::default();
-    env.mock_all_auths();
-    env.ledger().set_sequence_number(100);
-    let contract_id = env.register(NebulaRelay, ());
-    let client = NebulaRelayClient::new(&env, &contract_id);
-    let admin = Address::generate(&env);
-    let claimant = Address::generate(&env);
-    let verifier_router = Address::generate(&env);
-    let pool_adapter = env.register(PoolAdapterHarness, ());
-    let cctp_forwarder = env.register(CctpForwarderHarness, ());
-    let asset = Address::generate(&env);
-    let witness = load_witness(fixture("valid-lock.json")).unwrap();
-
-    client.initialize(
-        &admin,
-        &verifier_router,
-        &pool_adapter,
-        &cctp_forwarder,
-        &hex32(&env, &witness.expected.cctp_mint_recipient),
-        &BytesN::from_array(&env, &DEV_IMAGE_ID),
-        &asset,
-        &hex32(&env, &witness.expected.network_domain),
-    );
-    client.set_dev_mock_verifier(&admin, &true);
-    client.register_source(
-        &admin,
-        &witness.source_chain_id,
-        &hex20(&env, &witness.expected.escrow_contract),
-        &hex20(&env, &witness.expected.token_address),
-        &witness.expected.min_amount.parse::<i128>().unwrap(),
-        &witness.expected.max_amount.parse::<i128>().unwrap(),
-        &true,
-    );
-    client.register_compliance_root(
-        &admin,
-        &hex32(&env, &witness.expected.compliance_root),
-        &1u32,
-        &witness.expected.expires_at_ledger,
-        &true,
-    );
-
-    let setup = Setup {
-        env,
-        contract_id,
-        verifier_router,
-        pool_adapter,
-        cctp_forwarder,
-        asset,
-        admin,
-        claimant,
-    };
-    setup.configure_adapter_from_journal(&valid_journal(), false);
-    setup.configure_cctp(false);
-    setup
-}
-
-#[cfg(feature = "dev-mock-verifier")]
-#[test]
-fn explicit_dev_mock_verifier_still_accepts_stage_6_artifact() {
-    let s = setup_dev_mock();
-    let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
-    let receipt = s.client().claim(
-        &s.claimant,
-        &seal,
-        &image_id,
-        &journal,
-        &cctp_message(&s.env),
-        &cctp_attestation(&s.env),
-        &Bytes::new(&s.env),
-    );
-
-    assert_eq!(receipt.nullifier, nullifier);
-    assert!(s.client().is_claimed(&nullifier));
 }

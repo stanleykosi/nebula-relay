@@ -2,7 +2,9 @@
 members = [
     "risc0/shared",
     "risc0/nebula-guest",
+    "risc0/methods",
     "risc0/nebula-host",
+    "contracts/stellar/nebula-pool-adapter",
     "contracts/stellar/nebula-relay",
 ]
 resolver = "2"
@@ -22,6 +24,12 @@ thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 soroban-sdk = "26.1.0"
+boundless-market = "2.0.1"
+risc0-zkvm = { version = "3.0.3", default-features = false }
+risc0-build = "3.0.3"
+risc0-ethereum-contracts = "3.0.1"
+tokio = "1"
+url = "2"
 
 [profile.release]
 opt-level = "z"

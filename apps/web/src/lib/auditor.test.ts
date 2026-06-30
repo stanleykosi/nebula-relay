@@ -6,7 +6,7 @@ import {
   buildAuditorPacket,
   serializeAuditorPacket,
 } from "./auditor";
-import { devProofArtifact, validLockWitness } from "./fixtures";
+import { testnetProofArtifact, validLockWitness } from "./fixtures";
 
 const fixtureClaimTx =
   "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -15,7 +15,7 @@ describe("auditor packet generator", () => {
   it("exports a schema-valid packet with required disclosure fields", () => {
     const packet = buildAuditorPacket({
       witness: validLockWitness,
-      proof: devProofArtifact,
+      proof: testnetProofArtifact,
       stellarClaimTxHash: fixtureClaimTx,
     });
 
@@ -25,12 +25,12 @@ describe("auditor packet generator", () => {
     expect(packet.stellarClaimTxHash).toBe(fixtureClaimTx);
     expect(packet.noteCommitment).toBe(validLockWitness.stellarNoteCommitment);
     expect(packet.claimNullifier).toBe(
-      devProofArtifact.publicOutputs.claimNullifier
+      testnetProofArtifact.publicOutputs.claimNullifier
     );
-    expect(packet.proofImageId).toBe(devProofArtifact.imageIdHex);
-    expect(packet.journalDigest).toBe(devProofArtifact.journalDigestHex);
+    expect(packet.proofImageId).toBe(testnetProofArtifact.imageIdHex);
+    expect(packet.journalDigest).toBe(testnetProofArtifact.journalDigestHex);
     expect(packet.cctpMessageHash).toBe(
-      devProofArtifact.publicOutputs.cctpMessageHash
+      testnetProofArtifact.publicOutputs.cctpMessageHash
     );
     expect(packet.verificationInstructions.length).toBeGreaterThan(0);
   });
@@ -38,7 +38,7 @@ describe("auditor packet generator", () => {
   it("serializes to JSON that round-trips through the schema", () => {
     const packet = buildAuditorPacket({
       witness: validLockWitness,
-      proof: devProofArtifact,
+      proof: testnetProofArtifact,
       stellarClaimTxHash: fixtureClaimTx,
     });
     const parsed = JSON.parse(serializeAuditorPacket(packet));
@@ -48,9 +48,9 @@ describe("auditor packet generator", () => {
 
   it("rejects a proof artifact that is not bound to the witness", () => {
     const mismatchedProof = {
-      ...devProofArtifact,
+      ...testnetProofArtifact,
       publicOutputs: {
-        ...devProofArtifact.publicOutputs,
+        ...testnetProofArtifact.publicOutputs,
         token: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       },
     };
@@ -66,7 +66,7 @@ describe("auditor packet generator", () => {
   it("keeps caveats explicit without claiming production view-key powers", () => {
     const packet = buildAuditorPacket({
       witness: validLockWitness,
-      proof: devProofArtifact,
+      proof: testnetProofArtifact,
       stellarClaimTxHash: fixtureClaimTx,
     });
     const text = JSON.stringify(packet).toLowerCase();

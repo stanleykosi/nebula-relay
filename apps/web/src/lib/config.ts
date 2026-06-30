@@ -1,4 +1,4 @@
-export type ProofMode = "fixture" | "dev" | "local-groth16" | "remote";
+export type ProofMode = "fixture" | "local-groth16" | "remote";
 export type VerifierMode = "mock" | "real-router";
 export type StellarNetwork = "localnet" | "testnet";
 
@@ -13,12 +13,7 @@ export interface DemoConfig {
   privatePoolMode: "mode-a-handoff" | "direct-pool-credit-planned";
 }
 
-const proofModes: readonly ProofMode[] = [
-  "fixture",
-  "dev",
-  "local-groth16",
-  "remote",
-];
+const proofModes: readonly ProofMode[] = ["fixture", "local-groth16", "remote"];
 
 function readProofMode(value: string | undefined): ProofMode {
   return proofModes.includes(value as ProofMode)
@@ -56,10 +51,10 @@ export const implementedVsDemoOnly = [
   },
   {
     label: "Local fallback",
-    text: "Fixture receipt, bundled proof artifact, simulated local claim state, and local replay/failure lab remain available for smoke tests.",
+    text: "Fixture receipt, simulated local claim state, and local replay/failure lab remain available for smoke tests. Fixture mode is not a claimable testnet proof.",
   },
   {
     label: "Planned",
-    text: "Live router Groth16 run, receipt-root finality, direct private-pool credit, and public CCTP testnet settlement transcript.",
+    text: "Receipt-root finality, direct private-pool credit, remote proving service, and public CCTP testnet settlement transcript.",
   },
 ];
