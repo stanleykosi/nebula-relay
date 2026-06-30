@@ -2,6 +2,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${NEBULA_ENV_FILE:-$ROOT_DIR/.env.local}"
+
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
 ARTIFACT_DIR="${NEBULA_ARTIFACT_DIR:-$ROOT_DIR/artifacts/demo}"
 WASM_PATH="${NEBULA_RELAY_WASM:-$ROOT_DIR/target/wasm32v1-none/release/nebula_relay_contract.wasm}"
 NETWORK="${STELLAR_NETWORK:-testnet}"
@@ -25,7 +34,7 @@ Required for a complete initialized deployment:
 Optional:
   STELLAR_NETWORK                Stellar CLI network (default: testnet)
   NEBULA_ADMIN                   Admin address (default: stellar keys address STELLAR_SOURCE)
-  NEBULA_IMAGE_ID                Accepted image ID hex
+  NEBULA_IMAGE_ID                Accepted Nebula guest image ID hex (required)
   NEBULA_NETWORK_DOMAIN          Network domain hex
   NEBULA_ARTIFACT_DIR            Artifact directory (default: artifacts/demo)
 
@@ -54,10 +63,11 @@ done
 
 mkdir -p "$ARTIFACT_DIR"
 
-IMAGE_ID="${NEBULA_IMAGE_ID:-0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000}"
+IMAGE_ID="${NEBULA_IMAGE_ID:-}"
 NETWORK_DOMAIN="${NEBULA_NETWORK_DOMAIN:-0x4e4542554c415f5354454c4c41525f544553544e45545f563100000000000000}"
 CONTRACT_ENV_PATH="$ARTIFACT_DIR/testnet-contracts.env"
 DEPLOYMENT_JSON_PATH="$ARTIFACT_DIR/testnet-deployment.json"
+DEV_IMAGE_ID="4e4542554c415f4445565f494d4147455f49445f563100000000000000000000"
 
 cli_bytes() {
   local value="$1"
@@ -65,6 +75,29 @@ cli_bytes() {
   value="${value#0X}"
   printf "%s" "$value"
 }
+
+is_hex32() {
+  local value
+  value="$(cli_bytes "$1" | tr '[:upper:]' '[:lower:]')"
+  [[ "$value" =~ ^[0-9a-f]{64}$ ]]
+}
+
+validate_image_id() {
+  if [ -z "$IMAGE_ID" ]; then
+    echo "Blocker: NEBULA_IMAGE_ID is required and must match the current Nebula RISC Zero guest image ID." >&2
+    exit 1
+  fi
+  if ! is_hex32 "$IMAGE_ID"; then
+    echo "Blocker: NEBULA_IMAGE_ID must be a 32-byte hex value." >&2
+    exit 1
+  fi
+  if [ "$(cli_bytes "$IMAGE_ID" | tr '[:upper:]' '[:lower:]')" = "$DEV_IMAGE_ID" ]; then
+    echo "Blocker: NEBULA_IMAGE_ID is still the old development placeholder." >&2
+    exit 1
+  fi
+}
+
+validate_image_id
 
 if [ "$DRY_RUN" = "1" ]; then
   echo "Dry run: would run stellar contract build"
@@ -164,7 +197,7 @@ NEBULA_IMAGE_ID=$IMAGE_ID
 NEBULA_NETWORK_DOMAIN=$NETWORK_DOMAIN
 EOF
 
-node - "$DEPLOYMENT_JSON_PATH" "$contract_id" "$NETWORK" "$SOURCE" "$admin" "$RISC0_VERIFIER_ROUTER_ID" "$POOL_ADAPTER_CONTRACT_ID" "$STELLAR_ASSET_CONTRACT_ID" "$CCTP_STELLAR_FORWARDER_ID" "$CCTP_STELLAR_FORWARDER_BYTES32" <<'NODE'
+node - "$DEPLOYMENT_JSON_PATH" "$contract_id" "$NETWORK" "$SOURCE" "$admin" "$RISC0_VERIFIER_ROUTER_ID" "$POOL_ADAPTER_CONTRACT_ID" "$STELLAR_ASSET_CONTRACT_ID" "$CCTP_STELLAR_FORWARDER_ID" "$CCTP_STELLAR_FORWARDER_BYTES32" "$IMAGE_ID" "$NETWORK_DOMAIN" <<'NODE'
 const fs = require("fs");
 const [
   path,
@@ -177,6 +210,8 @@ const [
   asset,
   cctpForwarder,
   cctpMintRecipient,
+  imageId,
+  networkDomain,
 ] = process.argv.slice(2);
 fs.writeFileSync(
   path,
@@ -194,6 +229,8 @@ fs.writeFileSync(
         cctpForwarder,
       },
       cctpMintRecipient,
+      imageId,
+      networkDomain,
       admin,
       initialized: true,
       blocker: null,

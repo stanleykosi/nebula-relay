@@ -1,79 +1,79 @@
 {
   "bufferPercent": 125,
   "funding": null,
-  "gasReserveEth": "0.000020000000000000",
-  "gasReserveWei": "20000000000000",
-  "generatedAt": "2026-06-30T02:39:05Z",
+  "generatedAt": "2026-06-30T08:14:43Z",
   "guestCycles": 404235,
   "imageIdHex": "0x79b0ae7f3c792a2a9b2a8c3786cc7be70c1fa81e06e7f7adc33faf4c9273fe4f",
   "indexerUrlTried": "sdk-default-for-chain-8453",
   "journalDigestHex": "0x61a9c9a8c400ea8a003d40f8ccacb4ca33347f3aa1dc95c07d938759adde8fdc",
   "marketBlocksScanned": 250,
+  "marketEstimate": {
+    "configuredMaxPriceEth": null,
+    "configuredMaxPriceWei": null,
+    "configuredMinPriceEth": null,
+    "configuredMinPriceWei": null,
+    "liveEstimateMaxPriceEth": "0.000000157452058969",
+    "liveEstimateMaxPriceWei": "157452058969",
+    "liveEstimateMinPriceEth": "0.000000102828288713",
+    "liveEstimateMinPriceWei": "102828288713",
+    "maxPriceEth": "0.000000157452058969",
+    "maxPriceWei": "157452058969",
+    "minPriceEth": "0.000000102828288713",
+    "minPriceWei": "102828288713",
+    "strategy": "p95-to-p99-buffered-market-diagnostic"
+  },
   "percentiles": {
     "p10": {
-      "bufferedEth": "0.000000023386005338",
-      "bufferedWei": "23386005338",
-      "pricePerCycleWei": "46282",
-      "rawEth": "0.000000018708804270",
-      "rawWei": "18708804270",
-      "totalWithGasReserveEth": "0.000020023386005338",
-      "totalWithGasReserveWei": "20023386005338"
+      "bufferedEth": "0.000000027274240744",
+      "bufferedWei": "27274240744",
+      "pricePerCycleWei": "53977",
+      "rawEth": "0.000000021819392595",
+      "rawWei": "21819392595"
     },
     "p25": {
-      "bufferedEth": "0.000000045408728138",
-      "bufferedWei": "45408728138",
-      "pricePerCycleWei": "89866",
-      "rawEth": "0.000000036326982510",
-      "rawWei": "36326982510",
-      "totalWithGasReserveEth": "0.000020045408728138",
-      "totalWithGasReserveWei": "20045408728138"
+      "bufferedEth": "0.000000045287962932",
+      "bufferedWei": "45287962932",
+      "pricePerCycleWei": "89627",
+      "rawEth": "0.000000036230370345",
+      "rawWei": "36230370345"
     },
     "p50": {
-      "bufferedEth": "0.000000058163352975",
-      "bufferedWei": "58163352975",
-      "pricePerCycleWei": "115108",
-      "rawEth": "0.000000046530682380",
-      "rawWei": "46530682380",
-      "totalWithGasReserveEth": "0.000020058163352975",
-      "totalWithGasReserveWei": "20058163352975"
+      "bufferedEth": "0.000000055461042000",
+      "bufferedWei": "55461042000",
+      "pricePerCycleWei": "109760",
+      "rawEth": "0.000000044368833600",
+      "rawWei": "44368833600"
     },
     "p75": {
-      "bufferedEth": "0.000000074862806119",
-      "bufferedWei": "74862806119",
-      "pricePerCycleWei": "148157",
-      "rawEth": "0.000000059890244895",
-      "rawWei": "59890244895",
-      "totalWithGasReserveEth": "0.000020074862806119",
-      "totalWithGasReserveWei": "20074862806119"
+      "bufferedEth": "0.000000070581452175",
+      "bufferedWei": "70581452175",
+      "pricePerCycleWei": "139684",
+      "rawEth": "0.000000056465161740",
+      "rawWei": "56465161740"
     },
     "p90": {
-      "bufferedEth": "0.000000095778935607",
-      "bufferedWei": "95778935607",
-      "pricePerCycleWei": "189551",
-      "rawEth": "0.000000076623148485",
-      "rawWei": "76623148485",
-      "totalWithGasReserveEth": "0.000020095778935607",
-      "totalWithGasReserveWei": "20095778935607"
+      "bufferedEth": "0.000000091555690444",
+      "bufferedWei": "91555690444",
+      "pricePerCycleWei": "181193",
+      "rawEth": "0.000000073244552355",
+      "rawWei": "73244552355"
     },
     "p95": {
-      "bufferedEth": "0.000000104208245944",
-      "bufferedWei": "104208245944",
-      "pricePerCycleWei": "206233",
-      "rawEth": "0.000000083366596755",
-      "rawWei": "83366596755",
-      "totalWithGasReserveEth": "0.000020104208245944",
-      "totalWithGasReserveWei": "20104208245944"
+      "bufferedEth": "0.000000102828288713",
+      "bufferedWei": "102828288713",
+      "pricePerCycleWei": "203502",
+      "rawEth": "0.000000082262630970",
+      "rawWei": "82262630970"
     },
     "p99": {
-      "bufferedEth": "0.000000154757327400",
-      "bufferedWei": "154757327400",
-      "pricePerCycleWei": "306272",
-      "rawEth": "0.000000123805861920",
-      "rawWei": "123805861920",
-      "totalWithGasReserveEth": "0.000020154757327400",
-      "totalWithGasReserveWei": "20154757327400"
+      "bufferedEth": "0.000000157452058969",
+      "bufferedWei": "157452058969",
+      "pricePerCycleWei": "311605",
+      "rawEth": "0.000000125961647175",
+      "rawWei": "125961647175"
     }
   },
+  "pricingNote": "diagnostic market estimate only; funding uses quote-boundless-sdk / Boundless SDK Client::build_request",
   "pricingSource": "indexer-chain-8453",
   "proofRequest": {
     "guestCycles": 404235,
@@ -85,28 +85,6 @@
     "witnessHash": "0xb079b34b9a051ffaa53f0a44854c223c887764a85ad4ad5906e33e76af3f3c27"
   },
   "quoteType": "boundless-remote-proof",
-  "recommendedOffer": {
-    "configuredMaxPriceEth": null,
-    "configuredMaxPriceWei": null,
-    "configuredMinPriceEth": null,
-    "configuredMinPriceWei": null,
-    "env": {
-      "BOUNDLESS_LOCK_TIMEOUT_SECS": "1800",
-      "BOUNDLESS_MAX_PRICE": "0.000020154757327400 ETH",
-      "BOUNDLESS_MIN_PRICE": "0.000020104208245944 ETH",
-      "BOUNDLESS_RAMP_UP_PERIOD_SECS": "0",
-      "BOUNDLESS_TIMEOUT_SECS": "3600"
-    },
-    "liveEstimateMaxPriceEth": "0.000020154757327400",
-    "liveEstimateMaxPriceWei": "20154757327400",
-    "liveEstimateMinPriceEth": "0.000020104208245944",
-    "liveEstimateMinPriceWei": "20104208245944",
-    "maxPriceEth": "0.000020154757327400",
-    "maxPriceWei": "20154757327400",
-    "minPriceEth": "0.000020104208245944",
-    "minPriceWei": "20104208245944",
-    "strategy": "fast-testnet-p95-to-p99-zero-ramp"
-  },
   "version": 1,
   "warnings": [
     "Boundless balance query failed: Boundless remote proving is not configured: read-only market quote does not query wallet or market balances"

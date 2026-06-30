@@ -26,7 +26,7 @@ const networkPassphrase = StellarSdk.Networks.TESTNET;
 const claim: ClaimArgs = {
   claimant,
   seal: "0x4e4542554c415f4445565f5345414c5f5631",
-  imageId: "0x4e4542554c415f4445565f494d4147455f49445f563100000000000000000000",
+  imageId: "0x79b0ae7f3c792a2a9b2a8c3786cc7be70c1fa81e06e7f7adc33faf4c9273fe4f",
   journal: "0x01020304",
   cctpMessage: "0x010203040506",
   cctpAttestation: "0x0a0b0c0d",

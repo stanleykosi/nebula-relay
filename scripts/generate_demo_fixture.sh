@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_DIR="${NEBULA_ARTIFACT_DIR:-$ROOT_DIR/artifacts/demo}"
 WITNESS_PATH="${NEBULA_WITNESS_FIXTURE:-$ROOT_DIR/fixtures/valid-lock.json}"
-PROOF_PATH="${NEBULA_PROOF_ARTIFACT:-$ROOT_DIR/artifacts/groth16-proof.json}"
+PROOF_PATH="${NEBULA_PROOF_ARTIFACT:-$ROOT_DIR/artifacts/remote-proof.json}"
 SUBMISSION_PATH="${NEBULA_DEMO_SUBMISSION:-$ARTIFACT_DIR/demo-submission.json}"
 AUDITOR_PACKET_PATH="${NEBULA_AUDITOR_PACKET:-$ARTIFACT_DIR/auditor-packet.json}"
 PROOF_MODE="${RISC0_PROVER_MODE:-remote}"

@@ -1,9 +1,6 @@
 use boundless_market::{
     alloy::{
-        primitives::{
-            utils::{format_ether, parse_ether},
-            Address, U256,
-        },
+        primitives::{utils::format_ether, Address, U256},
         providers::Provider,
     },
     client::FundingMode,
@@ -69,7 +66,6 @@ pub struct BoundlessConfig {
 struct BoundlessQuoteConfig {
     indexer_url: Option<Url>,
     buffer_percent: u64,
-    gas_reserve: U256,
     market_blocks: u64,
     event_chunk_size: u64,
     pricing_timeout: Duration,
@@ -149,21 +145,10 @@ impl BoundlessQuoteConfig {
     where
         F: Fn(&str) -> Option<String>,
     {
-        let gas_reserve = var(&lookup, "BOUNDLESS_QUOTE_GAS_RESERVE_ETH")
-            .map(|value| parse_ether(&value))
-            .transpose()
-            .map_err(|error| {
-                HostError::BoundlessConfig(format!(
-                    "BOUNDLESS_QUOTE_GAS_RESERVE_ETH is invalid: {error}"
-                ))
-            })?
-            .unwrap_or_else(|| parse_ether("0.00002").expect("static ETH amount parses"));
-
         Ok(Self {
             indexer_url: parse_optional::<Url, _>(&lookup, "BOUNDLESS_QUOTE_INDEXER_URL")?,
             buffer_percent: parse_optional::<u64, _>(&lookup, "BOUNDLESS_QUOTE_BUFFER_PERCENT")?
                 .unwrap_or(125),
-            gas_reserve,
             market_blocks: parse_optional::<u64, _>(&lookup, "BOUNDLESS_QUOTE_MARKET_BLOCKS")?
                 .unwrap_or(250),
             event_chunk_size: parse_optional::<u64, _>(
@@ -686,13 +671,11 @@ fn build_boundless_quote(
         snapshot.percentiles.p95,
         cycles,
         quote_config.buffer_percent,
-        quote_config.gas_reserve,
     );
     let p99_total = quote_total(
         snapshot.percentiles.p99,
         cycles,
         quote_config.buffer_percent,
-        quote_config.gas_reserve,
     );
     let mut warnings = snapshot.warnings.clone();
     let configured_min = offer_price_eth(
@@ -761,15 +744,14 @@ fn build_boundless_quote(
         "pricingSource": snapshot.source,
         "indexerUrlTried": snapshot.indexer_url,
         "bufferPercent": quote_config.buffer_percent,
-        "gasReserveWei": quote_config.gas_reserve.to_string(),
-        "gasReserveEth": wei_to_eth(quote_config.gas_reserve),
+        "pricingNote": "diagnostic market estimate only; funding uses quote-boundless-sdk / Boundless SDK Client::build_request",
         "marketBlocksScanned": quote_config.market_blocks,
         "percentiles": percentiles_json(&snapshot.percentiles, cycles, quote_config),
-        "recommendedOffer": {
+        "marketEstimate": {
             "strategy": if snapshot.source == "static-fallback" {
-                "explicit-env-floor-plus-static-cycle-estimate"
+                "explicit-env-floor-plus-static-cycle-estimate-diagnostic"
             } else {
-                "fast-testnet-p95-to-p99-zero-ramp"
+                "p95-to-p99-buffered-market-diagnostic"
             },
             "minPriceWei": recommended_min.to_string(),
             "minPriceEth": wei_to_eth(recommended_min),
@@ -782,14 +764,7 @@ fn build_boundless_quote(
             "liveEstimateMinPriceWei": p95_total.to_string(),
             "liveEstimateMinPriceEth": wei_to_eth(p95_total),
             "liveEstimateMaxPriceWei": p99_total.to_string(),
-            "liveEstimateMaxPriceEth": wei_to_eth(p99_total),
-            "env": {
-                "BOUNDLESS_MIN_PRICE": format!("{} ETH", wei_to_eth(recommended_min)),
-                "BOUNDLESS_MAX_PRICE": format!("{} ETH", wei_to_eth(recommended_max)),
-                "BOUNDLESS_RAMP_UP_PERIOD_SECS": "0",
-                "BOUNDLESS_LOCK_TIMEOUT_SECS": "1800",
-                "BOUNDLESS_TIMEOUT_SECS": "3600"
-            }
+            "liveEstimateMaxPriceEth": wei_to_eth(p99_total)
         },
         "funding": funding,
         "warnings": warnings
@@ -834,20 +809,17 @@ fn percentiles_json(
 fn price_json(price_per_cycle: U256, cycles: u64, quote_config: &BoundlessQuoteConfig) -> Value {
     let raw = price_per_cycle * U256::from(cycles);
     let buffered = apply_percent(raw, quote_config.buffer_percent);
-    let total = buffered + quote_config.gas_reserve;
     json!({
         "pricePerCycleWei": price_per_cycle.to_string(),
         "rawWei": raw.to_string(),
         "rawEth": wei_to_eth(raw),
         "bufferedWei": buffered.to_string(),
-        "bufferedEth": wei_to_eth(buffered),
-        "totalWithGasReserveWei": total.to_string(),
-        "totalWithGasReserveEth": wei_to_eth(total)
+        "bufferedEth": wei_to_eth(buffered)
     })
 }
 
-fn quote_total(price_per_cycle: U256, cycles: u64, buffer_percent: u64, gas_reserve: U256) -> U256 {
-    apply_percent(price_per_cycle * U256::from(cycles), buffer_percent) + gas_reserve
+fn quote_total(price_per_cycle: U256, cycles: u64, buffer_percent: u64) -> U256 {
+    apply_percent(price_per_cycle * U256::from(cycles), buffer_percent)
 }
 
 fn apply_percent(value: U256, percent: u64) -> U256 {
@@ -1271,17 +1243,16 @@ mod tests {
     }
 
     #[test]
-    fn quote_total_applies_buffer_and_gas_reserve() {
-        let total = quote_total(U256::from(100_000u64), 2_000_000, 125, U256::from(5_000u64));
-        assert_eq!(total, U256::from(250_000_005_000u64));
+    fn quote_total_applies_buffer() {
+        let total = quote_total(U256::from(100_000u64), 2_000_000, 125);
+        assert_eq!(total, U256::from(250_000_000_000u64));
     }
 
     #[test]
-    fn quote_config_uses_separate_indexer_override() {
+    fn quote_config_uses_separate_indexer_override_without_offer_constants() {
         let config = BoundlessQuoteConfig::from_lookup(lookup(HashMap::from([
             ("BOUNDLESS_QUOTE_INDEXER_URL", "https://indexer.example/"),
             ("BOUNDLESS_QUOTE_BUFFER_PERCENT", "150"),
-            ("BOUNDLESS_QUOTE_GAS_RESERVE_ETH", "0.01"),
         ])))
         .unwrap();
         assert_eq!(
@@ -1289,7 +1260,6 @@ mod tests {
             "https://indexer.example/"
         );
         assert_eq!(config.buffer_percent, 150);
-        assert_eq!(wei_to_eth(config.gas_reserve), "0.010000000000000000");
     }
 
     #[test]

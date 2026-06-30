@@ -2,15 +2,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FIXTURE_PATH="${NEBULA_LOCK_FIXTURE:-$ROOT_DIR/fixtures/valid-lock.json}"
-QUOTE_PATH="${BOUNDLESS_QUOTE_ARTIFACT:-$ROOT_DIR/artifacts/boundless-quote.json}"
+ENV_FILE="${NEBULA_ENV_FILE:-$ROOT_DIR/.env.local}"
 
-if [[ -f "$ROOT_DIR/.env.local" ]]; then
+if [[ -f "$ENV_FILE" ]]; then
   set -a
-  # shellcheck disable=SC1091
-  source "$ROOT_DIR/.env.local"
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
   set +a
 fi
+
+FIXTURE_PATH="${NEBULA_LOCK_FIXTURE:-$ROOT_DIR/fixtures/valid-lock.json}"
+QUOTE_PATH="${BOUNDLESS_QUOTE_ARTIFACT:-$ROOT_DIR/artifacts/boundless-quote.json}"
 
 required_env=(
   BOUNDLESS_RPC_URL

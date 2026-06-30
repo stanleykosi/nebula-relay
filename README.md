@@ -127,7 +127,7 @@ Generate a Boundless remote Groth16 proof artifact for the Railway/backend path:
 export RISC0_PROVER_MODE=remote
 export BOUNDLESS_RPC_URL="https://..."
 export BOUNDLESS_PRIVATE_KEY="0x..."
-export BOUNDLESS_MARKET_CHAIN_ID=11155111
+export BOUNDLESS_MARKET_CHAIN_ID=8453
 export PINATA_JWT="..."
 cargo run -p nebula-host -- prove --fixture fixtures/valid-lock.json --mode remote --out artifacts/remote-proof.json
 ```
@@ -171,14 +171,14 @@ For the Railway prover/relayer backend, add server-only values:
 RISC0_PROVER_MODE=remote
 BOUNDLESS_RPC_URL=
 BOUNDLESS_PRIVATE_KEY=
-BOUNDLESS_MARKET_CHAIN_ID=11155111
+BOUNDLESS_MARKET_CHAIN_ID=8453
 BOUNDLESS_PROGRAM_URL=
 PINATA_JWT=
 BOUNDLESS_MAX_PRICE=
 BOUNDLESS_TIMEOUT_SECS=
 ```
 
-`BOUNDLESS_PROGRAM_URL` is optional only when a storage uploader such as Pinata or S3 is configured. `BOUNDLESS_PRIVATE_KEY` must be funded on the selected Boundless request network and must never be exposed to the frontend.
+`BOUNDLESS_MARKET_CHAIN_ID=8453` is for the Boundless proving/payment market on Base mainnet. The bridge route itself remains Ethereum Sepolia -> Stellar testnet. `BOUNDLESS_PROGRAM_URL` is optional only when a storage uploader such as Pinata or S3 is configured. `BOUNDLESS_PRIVATE_KEY` must be funded on the selected Boundless request network and must never be exposed to the frontend.
 
 Deployment script dry-runs:
 
@@ -203,9 +203,10 @@ Live testnet contracts have been deployed for the source wrapper and Stellar cla
 | Stellar testnet | Circle CCTP Forwarder | `CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ` |
 | Stellar testnet | Circle CCTP Message Transmitter | `CBJ6MTCKKZG73PMDZCJMSFRD7DQEMI4FKDH7CGDSV4W6FHCRBCQAVVJY` |
 | Stellar testnet | Circle CCTP Token Messenger Minter | `CDNG7HXAPBWICI2E3AUBP3YZWZELJLYSB6F5CC7WLDTLTHVM74SLRTHP` |
-| Stellar testnet | NebulaRelay | `CDDXQVILCGQCO4S2ZARUGABF54FLF6UMSQMY57VHFC7D75GYBDNURLWD` |
+| Stellar testnet | NebulaRelay | `CAXNVQPBXREPLMTWIO2IR6EWKUDTNLC3SS25SLX5IEGG27NNCAZO3EBY` |
 | Stellar testnet | RISC Zero verifier router | `CB6DYBAUGPNKNG77BBN6TUCN2E7PTFY3GSEEIYA5HVLOYFBWIE67Q6P3` |
 | Stellar testnet | Pool adapter / handoff wrapper | `CABW53ILEK6T3HPG2CRG5NFT36HCA3QXPKU4HOPY6KCAUPLONPSKD77F` |
+| RISC Zero | Nebula guest image ID | `0x79b0ae7f3c792a2a9b2a8c3786cc7be70c1fa81e06e7f7adc33faf4c9273fe4f` |
 
 ## Submission Package
 

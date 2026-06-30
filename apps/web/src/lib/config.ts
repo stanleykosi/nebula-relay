@@ -39,6 +39,7 @@ export const demoConfig: DemoConfig = {
   nebulaRelayContractId:
     process.env.NEXT_PUBLIC_NEBULA_RELAY_CONTRACT_ID ?? "TBD",
   evmEscrowAddress:
+    process.env.NEXT_PUBLIC_NEBULA_CCTP_ESCROW_ADDRESS ??
     process.env.NEXT_PUBLIC_EVM_ESCROW_ADDRESS ??
     "0x1111111111111111111111111111111111111111",
   privatePoolMode: "mode-a-handoff",
@@ -55,6 +56,6 @@ export const implementedVsDemoOnly = [
   },
   {
     label: "Planned",
-    text: "Receipt-root finality, direct private-pool credit, remote proving service, and public CCTP testnet settlement transcript.",
+    text: "Receipt-root finality, direct private-pool credit, Railway prover orchestration, and public CCTP testnet settlement transcript.",
   },
 ];

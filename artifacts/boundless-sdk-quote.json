@@ -8,8 +8,8 @@
   },
   "funding": {
     "fundingMode": "AvailableBalance",
-    "fundingValueEth": "0.000027523255015932",
-    "fundingValueWei": "27523255015932",
+    "fundingValueEth": "0.000027432991402720",
+    "fundingValueWei": "27432991402720",
     "marketBalanceEth": "0.000000000000000000",
     "marketBalanceWei": "0",
     "walletBalanceEth": "0.000000000000000000",
@@ -20,19 +20,19 @@
     "depositGasCostEth": "0.000000308004000000",
     "depositGasCostWei": "308004000000",
     "gasPriceWei": "6000000",
-    "walletEthNeededEth": "0.000027831259015932",
-    "walletEthNeededWei": "27831259015932"
+    "walletEthNeededEth": "0.000027740995402720",
+    "walletEthNeededWei": "27740995402720"
   },
-  "generatedAt": "2026-06-30T03:02:50Z",
+  "generatedAt": "2026-06-30T08:34:08Z",
   "offer": {
     "lockCollateral": "20000000000000000000",
     "lockTimeoutSecs": 1800,
-    "maxPriceEth": "0.000027523255015932",
-    "maxPriceWei": "27523255015932",
+    "maxPriceEth": "0.000027432991402720",
+    "maxPriceWei": "27432991402720",
     "minPriceEth": "0.000000000000000000",
     "minPriceWei": "0",
     "rampUpPeriodSecs": 0,
-    "rampUpStart": 1782788588,
+    "rampUpStart": 1782808467,
     "timeoutSecs": 3600
   },
   "proofRequest": {
@@ -46,11 +46,11 @@
   },
   "quoteType": "boundless-sdk-dry-run",
   "request": {
-    "expiresAt": 1782792188,
+    "expiresAt": 1782812067,
     "imageUrl": "https://gateway.pinata.cloud/ipfs/bafkreiam4f5klez2mxjlxy37mgyffmgne4sxt6xyifa4m7mf62ltyymab4",
     "inputType": "Url",
-    "lockExpiresAt": 1782790388,
-    "requestId": "0xe08cee819b40dea22a94dc4aa3ea679eebf5a8732e35511f"
+    "lockExpiresAt": 1782810267,
+    "requestId": "0xe08cee819b40dea22a94dc4aa3ea679eebf5a87343f523d9"
   },
   "version": 1,
   "warnings": []

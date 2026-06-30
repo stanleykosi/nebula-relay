@@ -2,11 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${NEBULA_ENV_FILE:-$ROOT_DIR/.env.local}"
 
-if [[ -f "$ROOT_DIR/.env.local" ]]; then
+if [[ -f "$ENV_FILE" ]]; then
   set -a
-  # shellcheck disable=SC1091
-  source "$ROOT_DIR/.env.local"
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
   set +a
 fi
 

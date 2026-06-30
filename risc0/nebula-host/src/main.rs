@@ -19,7 +19,7 @@ enum Command {
     Prove {
         #[arg(long)]
         fixture: PathBuf,
-        #[arg(long, default_value = "local-groth16")]
+        #[arg(long, default_value = "remote")]
         mode: String,
         #[arg(long)]
         out: PathBuf,
