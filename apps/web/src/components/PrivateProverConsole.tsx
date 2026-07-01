@@ -43,6 +43,10 @@ type PendingRequest = {
   timeout: number;
 };
 
+type RuntimeRequestOptions = {
+  timeoutMs?: number;
+};
+
 type RuntimeHealth = {
   ok: boolean;
   assets: PrivateProverAssetStatus[];
@@ -83,7 +87,7 @@ export function PrivateProverConsole() {
   );
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pending = useRef(new Map<string, PendingRequest>());
-  const autoInitStarted = useRef(false);
+  const bootStarted = useRef(false);
 
   const [runtimeReady, setRuntimeReady] = useState(false);
   const [assetStatus, setAssetStatus] = useState<PrivateProverAssetStatus[]>(
@@ -143,7 +147,8 @@ export function PrivateProverConsole() {
 
   const sendRuntime = async <T,>(
     command: string,
-    payload?: Record<string, unknown>
+    payload?: Record<string, unknown>,
+    options: RuntimeRequestOptions = {}
   ): Promise<T> => {
     const target = iframeRef.current?.contentWindow;
     if (!target) {
@@ -161,7 +166,7 @@ export function PrivateProverConsole() {
               `Private prover runtime did not respond to ${command}. Check that runtime assets are deployed at ${config.runtimeUrl}.`
             )
           );
-        }, 30_000),
+        }, options.timeoutMs ?? 30_000),
       });
     });
     target.postMessage(
@@ -188,44 +193,103 @@ export function PrivateProverConsole() {
     }
   };
 
-  const checkAssets = async () =>
-    run("Checking prover assets", async () => {
-      const [pageAssets, runtimeHealth] = await Promise.all([
-        checkPrivateProverAssets(config.assetBaseUrl),
-        sendRuntime<RuntimeHealth>("health"),
-      ]);
-      setAssetStatus(runtimeHealth.assets.length ? runtimeHealth.assets : pageAssets);
-      setStatus(runtimeHealth.ok ? "Assets ready" : "Assets missing");
-    });
+  useEffect(() => {
+    if (bootStarted.current) {
+      return;
+    }
+    bootStarted.current = true;
+    void bootRuntime();
+  }, []);
 
-  const initializeRuntime = async () =>
-    run("Initializing browser prover", async () => {
+  const bootRuntime = async () =>
+    run("Booting private prover runtime", async () => {
       if (!config.stellarRpcUrl) {
         throw new Error("NEXT_PUBLIC_STELLAR_RPC_URL is required");
       }
-      const result = await sendRuntime<InitResult>("init", {
-        rpcUrl: config.stellarRpcUrl,
-        bootnodeUrl: config.bootnodeUrl,
+
+      setStatus("Checking prover assets");
+      const pageAssets = await checkPrivateProverAssets(config.assetBaseUrl);
+      setAssetStatus(pageAssets);
+      const missing = pageAssets.filter((asset) => !asset.ok);
+      if (missing.length) {
+        throw new Error(
+          `Private prover assets are missing: ${missing
+            .map((asset) => `${asset.name}${asset.status ? ` (${asset.status})` : ""}`)
+            .join(", ")}`
+        );
+      }
+
+      setStatus("Waiting for runtime frame");
+      await waitForRuntimeFrame();
+
+      setStatus("Checking runtime health");
+      const runtimeHealth = await retryRuntime<RuntimeHealth>("health", undefined, {
+        attempts: 6,
+        timeoutMs: 5_000,
+        delayMs: 750,
       });
+      setRuntimeReady(true);
+      setAssetStatus(runtimeHealth.assets.length ? runtimeHealth.assets : pageAssets);
+      if (!runtimeHealth.ok) {
+        const failed = runtimeHealth.assets.filter((asset) => !asset.ok);
+        throw new Error(
+          `Private prover runtime assets are missing: ${failed
+            .map((asset) => `${asset.name}${asset.status ? ` (${asset.status})` : ""}`)
+            .join(", ")}`
+        );
+      }
+
+      setStatus("Initializing browser prover");
+      const result = await retryRuntime<InitResult>(
+        "init",
+        {
+          rpcUrl: config.stellarRpcUrl,
+          bootnodeUrl: config.bootnodeUrl,
+        },
+        {
+          attempts: 2,
+          timeoutMs: 90_000,
+          delayMs: 1_000,
+        }
+      );
       setInitialized(true);
       setPatchedPrepareOnly(result.patchedPrepareOnly);
-      setStatus(
-        result.patchedPrepareOnly
-          ? "Prepare-only prover ready"
-          : "Runtime loaded without prepareDeposit"
-      );
+      if (!result.patchedPrepareOnly) {
+        throw new Error("Runtime loaded without prepareDeposit");
+      }
+      setStatus("Private prover ready");
     });
 
-  useEffect(() => {
-    if (!runtimeReady || autoInitStarted.current) {
-      return;
+  const retryRuntime = async <T,>(
+    command: string,
+    payload: Record<string, unknown> | undefined,
+    options: { attempts: number; timeoutMs: number; delayMs: number }
+  ): Promise<T> => {
+    let lastError: Error | undefined;
+    for (let attempt = 1; attempt <= options.attempts; attempt += 1) {
+      try {
+        return await sendRuntime<T>(command, payload, {
+          timeoutMs: options.timeoutMs,
+        });
+      } catch (caught) {
+        lastError = caught instanceof Error ? caught : new Error(String(caught));
+        if (attempt < options.attempts) {
+          await sleep(options.delayMs);
+        }
+      }
     }
-    autoInitStarted.current = true;
-    void (async () => {
-      await checkAssets();
-      await initializeRuntime();
-    })();
-  }, [runtimeReady]);
+    throw lastError ?? new Error(`Private prover runtime ${command} failed`);
+  };
+
+  const waitForRuntimeFrame = async () => {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      if (iframeRef.current?.contentWindow) {
+        return;
+      }
+      await sleep(100);
+    }
+    throw new Error("Private prover runtime frame did not mount");
+  };
 
   const connectStellar = async () =>
     run("Connecting Stellar wallet", async () => {
@@ -348,9 +412,8 @@ export function PrivateProverConsole() {
         src={config.runtimeUrl}
         title="Nebula private prover runtime"
         onLoad={() => {
-          setRuntimeReady(true);
           setStatus((current) =>
-            current === "Runtime waiting" ? "Runtime loaded" : current
+            current === "Runtime waiting" ? "Runtime frame loaded" : current
           );
         }}
       />
@@ -479,4 +542,8 @@ function isAspRegistrationRequired(message: string): boolean {
     normalized.includes("asp membership registration is required") ||
     normalized.includes("register the asp membership leaf")
   );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
