@@ -253,7 +253,7 @@ index a2736c7..2177e08 100644
      pub(super) async fn execute_deposit_inner(
          &self,
 diff --git a/app/crates/platforms/web/src/workers/prover.rs b/app/crates/platforms/web/src/workers/prover.rs
-index b45ec6b..6a35bff 100644
+index b45ec6b..7273335 100644
 --- a/app/crates/platforms/web/src/workers/prover.rs
 +++ b/app/crates/platforms/web/src/workers/prover.rs
 @@ -80,11 +80,11 @@ thread_local! {
@@ -385,26 +385,32 @@ index b45ec6b..6a35bff 100644
      log::debug!("[{WORKER_NAME}] initialized");
 
      Ok(())
-@@ -235,12 +250,14 @@ pub(crate) async fn router(req: ProverWorkerRequest) -> Result<ProverWorkerRespo
+@@ -235,12 +250,18 @@ pub(crate) async fn router(req: ProverWorkerRequest) -> Result<ProverWorkerRespo
          }
          ProverWorkerRequest::Transact(params) => {
              log::debug!("[{WORKER_NAME}] transact");
-+            load_policy_circuit_artifacts().await?;
++            load_policy_circuit_artifacts()
++                .await
++                .map_err(|e| anyhow::anyhow!("{e:?}"))?;
              let artifacts = transact(params, hash_ext_data_offchain)?;
              log::debug!("[{WORKER_NAME}] prove_from_artifacts");
              ProverWorkerResponse::TransactPrepared(prove_from_artifacts(artifacts)?)
          }
          ProverWorkerRequest::Disclosure(req) => {
              log::debug!("[{WORKER_NAME}] disclosure");
-+            load_disclosure_circuit_artifacts().await?;
++            load_disclosure_circuit_artifacts()
++                .await
++                .map_err(|e| anyhow::anyhow!("{e:?}"))?;
 
              let context = types::DisclosureContext {
                  network: req.network,
-@@ -318,6 +335,7 @@ pub(crate) async fn router(req: ProverWorkerRequest) -> Result<ProverWorkerRespo
+@@ -318,6 +339,9 @@ pub(crate) async fn router(req: ProverWorkerRequest) -> Result<ProverWorkerRespo
          // the app, while proving is app-initiated, so the responsibilities differ.
          ProverWorkerRequest::VerifyDisclosureProof(receipt, expected_vk_hash) => {
              log::debug!("[{WORKER_NAME}] verify disclosure proof");
-+            load_disclosure_circuit_artifacts().await?;
++            load_disclosure_circuit_artifacts()
++                .await
++                .map_err(|e| anyhow::anyhow!("{e:?}"))?;
 
              // Early metadata validation for clear error messages. The actual
              // VK-byte trust binding lives inside disclosure::verify_receipt_proof.
