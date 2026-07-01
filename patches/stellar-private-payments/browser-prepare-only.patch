@@ -411,7 +411,7 @@ index 410e2eb..2535914 100644
      Disclosure(DisclosureProverRequest),
      VerifyDisclosureProof(DisclosureReceipt, String),
 diff --git a/app/crates/platforms/web/src/workers/prover.rs b/app/crates/platforms/web/src/workers/prover.rs
-index b45ec6b..71aa205 100644
+index b45ec6b..ecff1c0 100644
 --- a/app/crates/platforms/web/src/workers/prover.rs
 +++ b/app/crates/platforms/web/src/workers/prover.rs
 @@ -3,7 +3,6 @@ use crate::protocol::{
@@ -684,3 +684,29 @@ index b45ec6b..71aa205 100644
 
              // Early metadata validation for clear error messages. The actual
              // VK-byte trust binding lives inside disclosure::verify_receipt_proof.
+@@ -410,13 +501,21 @@ async fn fetch_circuit_file(path: &str) -> Result<Vec<u8>, JsError> {
+         .ok_or_else(|| JsError::new("Origin is not a string"))?;
+
+     let public_url = PUBLIC_URL.unwrap_or("/");
++    let asset_path = path.trim_start_matches('/');
+
+     let url_string = if public_url.starts_with("http://") || public_url.starts_with("https://") {
+-        format!("{public_url}{path}")
+-    } else if public_url == "/" {
+-        format!("{origin}/{path}")
++        format!("{}/{}", public_url.trim_end_matches('/'), asset_path)
++    } else if public_url.starts_with('/') {
++        let public_prefix = public_url.trim_end_matches('/');
++        if public_prefix.is_empty() {
++            format!("{origin}/{asset_path}")
++        } else {
++            format!("{origin}{public_prefix}/{asset_path}")
++        }
+     } else {
+-        return Err(JsError::new("PUBLIC_URL must be an absolute URL or '/'"));
++        return Err(JsError::new(
++            "PUBLIC_URL must be an absolute URL or a root-relative path",
++        ));
+     };
+
+     log::debug!("[{WORKER_NAME}] Fetching from: {}", url_string);
