@@ -1,0 +1,205 @@
+diff --git a/app/crates/platforms/web/src/client/mod.rs b/app/crates/platforms/web/src/client/mod.rs
+index abfcab3..80981e5 100644
+--- a/app/crates/platforms/web/src/client/mod.rs
++++ b/app/crates/platforms/web/src/client/mod.rs
+@@ -38,6 +38,13 @@ fn execute_hashes_to_js(result: Option<Vec<String>>) -> Result<JsValue, JsError>
+     }
+ }
+ 
++fn prepared_prover_tx_to_js(result: Option<PreparedProverTx>) -> Result<JsValue, JsError> {
++    match result {
++        None => Ok(JsValue::NULL),
++        Some(prepared) => Ok(serde_wasm_bindgen::to_value(&prepared)?),
++    }
++}
++
+ fn emit_progress(
+     on_status: &Option<Function>,
+     flow: &'static str,
+@@ -631,6 +638,28 @@ impl WebClient {
+         execute_hashes_to_js(result)
+     }
+ 
++    #[wasm_bindgen(js_name = prepareDeposit)]
++    #[allow(clippy::too_many_arguments)]
++    pub async fn prepare_deposit(
++        &self,
++        pool_contract_id: String,
++        user_address: String,
++        amount: BigInt,
++        output_amounts: Array,
++        on_status: Option<Function>,
++    ) -> Result<JsValue, JsError> {
++        let result = self
++            .prepare_deposit_inner(
++                pool_contract_id,
++                user_address,
++                amount,
++                output_amounts,
++                on_status,
++            )
++            .await?;
++        prepared_prover_tx_to_js(result)
++    }
++
+     #[wasm_bindgen(js_name = plan)]
+     pub async fn plan(
+         &self,
+@@ -740,6 +769,37 @@ impl WebClient {
+         execute_hashes_to_js(result)
+     }
+ 
++    #[wasm_bindgen(js_name = prepareTransact)]
++    #[allow(clippy::too_many_arguments)]
++    pub async fn prepare_transact_wasm(
++        &self,
++        pool_contract_id: String,
++        user_address: String,
++        ext_recipient: String,
++        ext_amount: BigInt,
++        input_note_ids: Array,
++        output_amounts: Array,
++        out_recipient_note_keys_hex: Array,
++        out_recipient_enc_keys_hex: Array,
++        on_status: Option<Function>,
++    ) -> Result<JsValue, JsError> {
++        let result = self
++            .prepare_transact_inner(
++                pool_contract_id,
++                user_address,
++                ext_recipient,
++                ext_amount,
++                input_note_ids,
++                output_amounts,
++                out_recipient_note_keys_hex,
++                out_recipient_enc_keys_hex,
++                on_status,
++                "prepareTransact",
++            )
++            .await?;
++        prepared_prover_tx_to_js(result)
++    }
++
+     #[wasm_bindgen(js_name = generateSelectiveDisclosure)]
+     #[allow(clippy::too_many_arguments)]
+     pub async fn generate_selective_disclosure(
+diff --git a/app/crates/platforms/web/src/client/transact.rs b/app/crates/platforms/web/src/client/transact.rs
+index a2736c7..d883514 100644
+--- a/app/crates/platforms/web/src/client/transact.rs
++++ b/app/crates/platforms/web/src/client/transact.rs
+@@ -299,6 +299,57 @@ impl WebClient {
+         }))
+     }
+ 
++    #[allow(clippy::too_many_arguments)]
++    pub(super) async fn prepare_transact_inner(
++        &self,
++        pool_contract_id: String,
++        user_address: String,
++        ext_recipient: String,
++        ext_amount: BigInt,
++        input_note_ids: Array,
++        output_amounts: Array,
++        out_recipient_note_keys_hex: Array,
++        out_recipient_enc_keys_hex: Array,
++        on_status: Option<Function>,
++        flow: &'static str,
++    ) -> Result<Option<PreparedProverTx>, JsError> {
++        let expected_outputs =
++            u32::try_from(N_OUTPUTS).map_err(|_| JsError::new("N_OUTPUTS exceeds u32"))?;
++        if out_recipient_note_keys_hex.length() != expected_outputs {
++            return Err(JsError::new(&format!(
++                "out_recipient_note_keys_hex must have length {N_OUTPUTS}"
++            )));
++        }
++        if out_recipient_enc_keys_hex.length() != expected_outputs {
++            return Err(JsError::new(&format!(
++                "out_recipient_enc_keys_hex must have length {N_OUTPUTS}"
++            )));
++        }
++
++        let ext_amount = parse_ext_amount_decimal(&ext_amount)?;
++        let input_commitments = parse_input_note_ids(
++            &input_note_ids,
++            0,
++            2,
++            "input_note_ids must have length 0..=2",
++        )?;
++        let out_amounts = parse_output_amounts(&output_amounts)?;
++        let (out_note_pks, out_enc_pks) =
++            parse_output_recipient_keys(&out_recipient_note_keys_hex, &out_recipient_enc_keys_hex)?;
++
++        let step = Transact::new(
++            input_commitments,
++            out_amounts,
++            ext_amount,
++            ext_recipient,
++            out_note_pks,
++            out_enc_pks,
++        );
++
++        self.prove_transact_inner(&pool_contract_id, &user_address, &step, flow, &on_status)
++            .await
++    }
++
+     #[allow(clippy::too_many_arguments)]
+     pub(super) async fn execute_transact_inner(
+         &self,
+@@ -356,6 +407,57 @@ impl WebClient {
+         self.execute_transact(ctx, step, flow).await
+     }
+ 
++    #[allow(clippy::too_many_arguments)]
++    pub(super) async fn prepare_deposit_inner(
++        &self,
++        pool_contract_id: String,
++        user_address: String,
++        amount: BigInt,
++        output_amounts: Array,
++        on_status: Option<Function>,
++    ) -> Result<Option<PreparedProverTx>, JsError> {
++        let ext_amount = parse_ext_amount_decimal(&amount)?;
++        if ext_amount <= ExtAmount::ZERO {
++            return Err(JsError::new("amount must be > 0 for deposit"));
++        }
++        let out_amounts = parse_output_amounts(&output_amounts)?;
++
++        let keys = match self
++            .storage_request(StorageWorkerRequest::UserKeys(user_address.clone()), 1_000)
++            .await?
++        {
++            StorageWorkerResponse::UserKeys(keys) => {
++                keys.ok_or_else(|| JsError::new("user keys not found in worker storage"))?
++            }
++            other => {
++                return Err(JsError::new(&format!(
++                    "Unexpected storage response loading user keys: {:?}",
++                    other
++                )));
++            }
++        };
++        let note_pk: NotePublicKey = keys.note_keypair.public;
++        let enc_pk: EncryptionPublicKey = keys.encryption_keypair.public;
++
++        let step = Transact::new(
++            Vec::new(),
++            out_amounts,
++            ext_amount,
++            pool_contract_id.clone(),
++            [Some(note_pk.clone()), Some(note_pk)],
++            [Some(enc_pk.clone()), Some(enc_pk)],
++        );
++
++        self.prove_transact_inner(
++            &pool_contract_id,
++            &user_address,
++            &step,
++            "prepareDeposit",
++            &on_status,
++        )
++        .await
++    }
++
+     #[allow(clippy::too_many_arguments)]
+     pub(super) async fn execute_deposit_inner(
+         &self,

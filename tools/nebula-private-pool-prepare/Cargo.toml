@@ -1,0 +1,24 @@
+[package]
+name = "nebula-private-pool-prepare"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Nebula helper for generating upstream-compatible Private Payments prepare-only artifacts"
+
+[dependencies]
+prover = { path = "../../vendor/stellar-private-payments/app/crates/core/prover" }
+stellar = { path = "../../vendor/stellar-private-payments/app/crates/core/stellar" }
+types = { path = "../../vendor/stellar-private-payments/app/crates/core/types" }
+witness = { path = "../../vendor/stellar-private-payments/app/crates/core/witness" }
+
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["std"] }
+tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread", "time"] }
+
+[patch.crates-io]
+cranelift-control = { path = "../../vendor/stellar-private-payments/vendor/cranelift-control" }
+
+[workspace]
