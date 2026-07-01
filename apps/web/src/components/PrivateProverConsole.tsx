@@ -75,7 +75,7 @@ type AspRegistrationPayload = {
 
 const PREPARED_JSON = "nebula-private-pool-prepared.json";
 const ASP_REQUEST_JSON = "nebula-asp-membership-request.json";
-const PREPARE_PROOF_TIMEOUT_MS = 30 * 60_000;
+const PREPARE_PROOF_TIMEOUT_MS = 60 * 60_000;
 
 export function PrivateProverConsole() {
   const config = useMemo(() => privateProverConfig(), []);

@@ -1,17 +1,18 @@
 diff --git a/app/crates/platforms/web/src/client/mod.rs b/app/crates/platforms/web/src/client/mod.rs
-index abfcab3..27c1c90 100644
+index abfcab3..49c7420 100644
 --- a/app/crates/platforms/web/src/client/mod.rs
 +++ b/app/crates/platforms/web/src/client/mod.rs
-@@ -30,6 +30,8 @@ mod transact;
+@@ -30,6 +30,9 @@ mod transact;
 
  const CONFIRM_POLL_ATTEMPTS: u32 = 30;
  const CONFIRM_POLL_INTERVAL_MS: u32 = 1_000;
-+const PROVER_LOAD_TIMEOUT_MS: u32 = 10 * 60_000;
-+const PROVER_TRANSACT_TIMEOUT_MS: u32 = 15 * 60_000;
++const PROVER_WORKER_BOOT_TIMEOUT_MS: u32 = 30_000;
++const PROVER_LOAD_STEP_TIMEOUT_MS: u32 = 10 * 60_000;
++const PROVER_TRANSACT_TIMEOUT_MS: u32 = 30 * 60_000;
 
  fn execute_hashes_to_js(result: Option<Vec<String>>) -> Result<JsValue, JsError> {
      match result {
-@@ -38,6 +40,13 @@ fn execute_hashes_to_js(result: Option<Vec<String>>) -> Result<JsValue, JsError>
+@@ -38,6 +41,13 @@ fn execute_hashes_to_js(result: Option<Vec<String>>) -> Result<JsValue, JsError>
      }
  }
 
@@ -25,16 +26,154 @@ index abfcab3..27c1c90 100644
  fn emit_progress(
      on_status: &Option<Function>,
      flow: &'static str,
-@@ -212,7 +221,7 @@ impl WebClient {
+@@ -210,19 +220,108 @@ impl WebClient {
+         }
+     }
 
-     pub async fn ping_prover(&self) -> anyhow::Result<()> {
-         let mut bridge = self.prover_bridge.fork();
+-    pub async fn ping_prover(&self) -> anyhow::Result<()> {
+-        let mut bridge = self.prover_bridge.fork();
 -        let resp = with_timeout(5_000, bridge.run(ProverWorkerRequest::Ping)).await?;
-+        let resp = with_timeout(PROVER_LOAD_TIMEOUT_MS, bridge.run(ProverWorkerRequest::Ping)).await?;
++    async fn prover_control_request_on_bridge(
++        bridge: &mut OneshotBridge<ProverWorker>,
++        req: ProverWorkerRequest,
++        timeout_ms: u32,
++        label: &'static str,
++    ) -> anyhow::Result<()> {
++        let resp = with_timeout(timeout_ms, bridge.run(req))
++            .await
++            .map_err(|e| anyhow::anyhow!("{label} timed out or failed: {e}"))?;
          match resp {
              ProverWorkerResponse::Pong => Ok(()),
-             ProverWorkerResponse::Error(e) => Err(anyhow::anyhow!(e)),
-@@ -631,6 +640,28 @@ impl WebClient {
+-            ProverWorkerResponse::Error(e) => Err(anyhow::anyhow!(e)),
++            ProverWorkerResponse::Error(e) => Err(anyhow::anyhow!("{label} failed: {e}")),
+             other => Err(anyhow::anyhow!(
+-                "unexpected response from Prover Worker: {:?}",
++                "unexpected response from {label}: {:?}",
+                 other
+             )),
+         }
+     }
+
++    pub async fn ping_prover(&self) -> anyhow::Result<()> {
++        let mut bridge = self.prover_bridge.fork();
++        Self::prover_control_request_on_bridge(
++            &mut bridge,
++            ProverWorkerRequest::Ping,
++            PROVER_WORKER_BOOT_TIMEOUT_MS,
++            "prover worker ping",
++        )
++        .await
++    }
++
++    pub(super) async fn load_policy_prover(
++        &self,
++        on_status: &Option<Function>,
++        flow: &'static str,
++    ) -> anyhow::Result<OneshotBridge<ProverWorker>> {
++        let mut bridge = self.prover_bridge.fork();
++
++        emit_progress(
++            on_status,
++            flow,
++            "prover_worker_ping",
++            "Starting prover worker…",
++        );
++        Self::prover_control_request_on_bridge(
++            &mut bridge,
++            ProverWorkerRequest::Ping,
++            PROVER_WORKER_BOOT_TIMEOUT_MS,
++            "prover worker ping",
++        )
++        .await?;
++
++        emit_progress(
++            on_status,
++            flow,
++            "fetch_policy_assets",
++            "Fetching policy circuit assets…",
++        );
++        Self::prover_control_request_on_bridge(
++            &mut bridge,
++            ProverWorkerRequest::LoadPolicyAssets,
++            PROVER_LOAD_STEP_TIMEOUT_MS,
++            "fetch policy circuit assets",
++        )
++        .await?;
++
++        emit_progress(
++            on_status,
++            flow,
++            "init_witness_calculator",
++            "Initializing witness calculator…",
++        );
++        Self::prover_control_request_on_bridge(
++            &mut bridge,
++            ProverWorkerRequest::InitPolicyWitness,
++            PROVER_LOAD_STEP_TIMEOUT_MS,
++            "initialize policy witness calculator",
++        )
++        .await?;
++
++        emit_progress(
++            on_status,
++            flow,
++            "init_policy_prover",
++            "Initializing policy prover…",
++        );
++        Self::prover_control_request_on_bridge(
++            &mut bridge,
++            ProverWorkerRequest::InitPolicyProver,
++            PROVER_LOAD_STEP_TIMEOUT_MS,
++            "initialize policy prover",
++        )
++        .await?;
++
++        emit_progress(
++            on_status,
++            flow,
++            "policy_prover_ready",
++            "Policy prover ready",
++        );
++        Ok(bridge)
++    }
++
+     async fn storage_request(
+         &self,
+         req: StorageWorkerRequest,
+@@ -251,13 +350,12 @@ impl WebClient {
+         }
+     }
+
+-    async fn prover_request(
++    pub(super) async fn prover_request_with_bridge(
+         &self,
++        bridge: &mut OneshotBridge<ProverWorker>,
+         req: ProverWorkerRequest,
+         timeout_ms: u32,
+     ) -> Result<ProverWorkerResponse, JsError> {
+-        let mut bridge = self.prover_bridge.fork();
+-
+         // Handle transport/timeout errors
+         let resp: ProverWorkerResponse = with_timeout(timeout_ms, bridge.run(req))
+             .await
+@@ -268,6 +366,16 @@ impl WebClient {
+             _ => Ok(resp),
+         }
+     }
++
++    async fn prover_request(
++        &self,
++        req: ProverWorkerRequest,
++        timeout_ms: u32,
++    ) -> Result<ProverWorkerResponse, JsError> {
++        let mut bridge = self.prover_bridge.fork();
++        self.prover_request_with_bridge(&mut bridge, req, timeout_ms)
++            .await
++    }
+ }
+
+ #[wasm_bindgen]
+@@ -631,6 +739,28 @@ impl WebClient {
          execute_hashes_to_js(result)
      }
 
@@ -63,7 +202,7 @@ index abfcab3..27c1c90 100644
      #[wasm_bindgen(js_name = plan)]
      pub async fn plan(
          &self,
-@@ -740,6 +771,37 @@ impl WebClient {
+@@ -740,6 +870,37 @@ impl WebClient {
          execute_hashes_to_js(result)
      }
 
@@ -102,41 +241,45 @@ index abfcab3..27c1c90 100644
      #[allow(clippy::too_many_arguments)]
      pub async fn generate_selective_disclosure(
 diff --git a/app/crates/platforms/web/src/client/transact.rs b/app/crates/platforms/web/src/client/transact.rs
-index a2736c7..2177e08 100644
+index a2736c7..085b9a6 100644
 --- a/app/crates/platforms/web/src/client/transact.rs
 +++ b/app/crates/platforms/web/src/client/transact.rs
-@@ -2,7 +2,7 @@
+@@ -2,9 +2,9 @@
  //! `executeTransfer`, `executeWithdraw`).
 
  use super::{
 -    WebClient, emit_progress, parse_ext_amount_decimal, parse_input_note_ids,
-+    PROVER_TRANSACT_TIMEOUT_MS, WebClient, emit_progress, parse_ext_amount_decimal, parse_input_note_ids,
-     parse_note_amount_decimal, parse_output_amounts, parse_output_recipient_keys,
-     parse_u32_decimal, sign::sign_prepared_transaction,
+-    parse_note_amount_decimal, parse_output_amounts, parse_output_recipient_keys,
+-    parse_u32_decimal, sign::sign_prepared_transaction,
++    PROVER_TRANSACT_TIMEOUT_MS, WebClient, emit_progress, parse_ext_amount_decimal,
++    parse_input_note_ids, parse_note_amount_decimal, parse_output_amounts,
++    parse_output_recipient_keys, parse_u32_decimal, sign::sign_prepared_transaction,
  };
-@@ -201,13 +201,19 @@ impl WebClient {
+ use crate::protocol::{
+     PreparedProverTx, ProverWorkerRequest, ProverWorkerResponse, StorageWorkerRequest,
+@@ -201,13 +201,18 @@ impl WebClient {
              }
          };
 
 -        emit_progress(on_status, flow, "prove", "Proving…");
-+        emit_progress(
-+            on_status,
-+            flow,
-+            "load_prover",
-+            "Loading deposit prover…",
-+        );
-         self.ping_prover()
+-        self.ping_prover()
++        let mut prover_bridge = self
++            .load_policy_prover(on_status, flow)
              .await
              .map_err(|e| JsError::new(&format!("failed to load prover: {e:?}")))?;
 
 +        emit_progress(on_status, flow, "prove", "Generating proof…");
          let prepared = match self
 -            .prover_request(ProverWorkerRequest::Transact(params), 20_000)
-+            .prover_request(ProverWorkerRequest::Transact(params), PROVER_TRANSACT_TIMEOUT_MS)
++            .prover_request_with_bridge(
++                &mut prover_bridge,
++                ProverWorkerRequest::Transact(params),
++                PROVER_TRANSACT_TIMEOUT_MS,
++            )
              .await?
          {
              ProverWorkerResponse::TransactPrepared(p) => p,
-@@ -299,6 +305,57 @@ impl WebClient {
+@@ -299,6 +304,57 @@ impl WebClient {
          }))
      }
 
@@ -194,7 +337,7 @@ index a2736c7..2177e08 100644
      #[allow(clippy::too_many_arguments)]
      pub(super) async fn execute_transact_inner(
          &self,
-@@ -356,6 +413,57 @@ impl WebClient {
+@@ -356,6 +412,57 @@ impl WebClient {
          self.execute_transact(ctx, step, flow).await
      }
 
@@ -252,25 +395,70 @@ index a2736c7..2177e08 100644
      #[allow(clippy::too_many_arguments)]
      pub(super) async fn execute_deposit_inner(
          &self,
+diff --git a/app/crates/platforms/web/src/protocol.rs b/app/crates/platforms/web/src/protocol.rs
+index 410e2eb..2535914 100644
+--- a/app/crates/platforms/web/src/protocol.rs
++++ b/app/crates/platforms/web/src/protocol.rs
+@@ -126,6 +126,10 @@ pub enum StorageWorkerResponse {
+ #[derive(Debug, Serialize, Deserialize)]
+ pub enum ProverWorkerRequest {
+     Ping,
++    LoadPolicyAssets,
++    InitPolicyWitness,
++    InitPolicyProver,
++    LoadPolicy,
+     Transact(TransactParams),
+     Disclosure(DisclosureProverRequest),
+     VerifyDisclosureProof(DisclosureReceipt, String),
 diff --git a/app/crates/platforms/web/src/workers/prover.rs b/app/crates/platforms/web/src/workers/prover.rs
-index b45ec6b..7273335 100644
+index b45ec6b..71aa205 100644
 --- a/app/crates/platforms/web/src/workers/prover.rs
 +++ b/app/crates/platforms/web/src/workers/prover.rs
-@@ -80,11 +80,11 @@ thread_local! {
+@@ -3,7 +3,6 @@ use crate::protocol::{
+ };
+ use anyhow::{Context as _, Result};
+ use futures::try_join;
+-use gloo_timers::future::TimeoutFuture;
+ use gloo_worker::{Registrable, oneshot::oneshot};
+ use prover::{
+     flows::{TransactArtifacts, transact},
+@@ -74,17 +73,32 @@ fn ensure_sha256_matches(
+ // wasm threads?
+
+ thread_local! {
++    static POLICY_WASM_BYTES: RefCell<Option<Vec<u8>>> = const { RefCell::new(None) };
++    static POLICY_R1CS_BYTES: RefCell<Option<Vec<u8>>> = const { RefCell::new(None) };
+     static WITNESS_CALC: RefCell<Option<WitnessCalculator>> = const { RefCell::new(None) };
+     static PROVER: RefCell<Option<Prover>> = const { RefCell::new(None) };
+     static DISCLOSURE_WITNESS_CALC: RefCell<Option<WitnessCalculator>> = const { RefCell::new(None) };
      static DISCLOSURE_PROVER: RefCell<Option<Prover>> = const { RefCell::new(None) };
  }
 
 -async fn load_circuit_artifacts() -> Result<(), JsError> {
-+async fn load_policy_circuit_artifacts() -> Result<(), JsError> {
-     if WITNESS_CALC.with(|s| s.borrow().is_some()) && PROVER.with(|s| s.borrow().is_some()) {
+-    if WITNESS_CALC.with(|s| s.borrow().is_some()) && PROVER.with(|s| s.borrow().is_some()) {
++fn policy_asset_bytes() -> Result<(Vec<u8>, Vec<u8>), JsError> {
++    let wasm_bytes = POLICY_WASM_BYTES
++        .with(|cell| cell.borrow().clone())
++        .ok_or_else(|| JsError::new("policy wasm bytes are not loaded"))?;
++    let r1cs_bytes = POLICY_R1CS_BYTES
++        .with(|cell| cell.borrow().clone())
++        .ok_or_else(|| JsError::new("policy r1cs bytes are not loaded"))?;
++    Ok((wasm_bytes, r1cs_bytes))
++}
++
++async fn load_policy_assets() -> Result<(), JsError> {
++    if POLICY_WASM_BYTES.with(|s| s.borrow().is_some())
++        && POLICY_R1CS_BYTES.with(|s| s.borrow().is_some())
++    {
          return Ok(());
      }
 -    let (wasm_bytes, r1cs_bytes, disc_wasm_bytes, disc_r1cs_bytes) = try_join!(
++
 +    let (wasm_bytes, r1cs_bytes) = try_join!(
          async {
              let wasm_bytes: Vec<u8> = fetch_circuit_file("circuits/policy_tx_2_2.wasm").await?;
              log::debug!(
-@@ -100,29 +100,12 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
+@@ -100,29 +114,12 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
                  r1cs_bytes.len()
              );
              Ok::<Vec<u8>, JsError>(r1cs_bytes)
@@ -303,21 +491,57 @@ index b45ec6b..7273335 100644
      ensure_sha256_matches(
          "policy_tx_2_2_proving_key.bin",
          PROVING_KEY,
-@@ -142,6 +125,48 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
+@@ -142,6 +139,84 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
          crate::artifact_hashes::EXPECTED_POLICY_TX_2_2_R1CS_SHA256,
      )?;
 
++    POLICY_WASM_BYTES.with(|cell| {
++        *cell.borrow_mut() = Some(wasm_bytes);
++    });
++    POLICY_R1CS_BYTES.with(|cell| {
++        *cell.borrow_mut() = Some(r1cs_bytes);
++    });
++
++    Ok(())
++}
++
++async fn init_policy_witness() -> Result<(), JsError> {
++    if WITNESS_CALC.with(|s| s.borrow().is_some()) {
++        return Ok(());
++    }
++
++    load_policy_assets().await?;
++    let (wasm_bytes, r1cs_bytes) = policy_asset_bytes()?;
 +    let witness_calc = WitnessCalculator::new(&wasm_bytes, &r1cs_bytes)
 +        .map_err(|e| JsError::new(&format!("failed to init witness calculator: {e:#}")))?;
-+    let prover = Prover::new(PROVING_KEY, &r1cs_bytes).expect("FAILED Prover");
 +
 +    WITNESS_CALC.with(|cell| {
 +        *cell.borrow_mut() = Some(witness_calc);
 +    });
++
++    Ok(())
++}
++
++async fn init_policy_prover() -> Result<(), JsError> {
++    if PROVER.with(|s| s.borrow().is_some()) {
++        return Ok(());
++    }
++
++    load_policy_assets().await?;
++    let (_, r1cs_bytes) = policy_asset_bytes()?;
++    let prover = Prover::new(PROVING_KEY, &r1cs_bytes)
++        .map_err(|e| JsError::new(&format!("failed to init policy prover: {e:#}")))?;
++
 +    PROVER.with(|cell| {
 +        *cell.borrow_mut() = Some(prover);
 +    });
 +
++    Ok(())
++}
++
++async fn load_policy_circuit_artifacts() -> Result<(), JsError> {
++    init_policy_witness().await?;
++    init_policy_prover().await?;
 +    Ok(())
 +}
 +
@@ -352,7 +576,7 @@ index b45ec6b..7273335 100644
      ensure_sha256_matches(
          "selectiveDisclosure_1_proving_key.bin",
          DISCLOSURE_PROVING_KEY,
-@@ -161,10 +186,6 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
+@@ -161,25 +236,15 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
          crate::artifact_hashes::EXPECTED_SELECTIVE_DISCLOSURE_1_R1CS_SHA256,
      )?;
 
@@ -363,9 +587,13 @@ index b45ec6b..7273335 100644
      let disc_witness_calc =
          WitnessCalculator::new(&disc_wasm_bytes, &disc_r1cs_bytes).map_err(|e| {
              JsError::new(&format!(
-@@ -174,12 +195,6 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
-     let disc_prover =
-         Prover::new(DISCLOSURE_PROVING_KEY, &disc_r1cs_bytes).expect("FAILED Disclosure Prover");
+                 "failed to init disclosure witness calculator: {e:#}"
+             ))
+         })?;
+-    let disc_prover =
+-        Prover::new(DISCLOSURE_PROVING_KEY, &disc_r1cs_bytes).expect("FAILED Disclosure Prover");
++    let disc_prover = Prover::new(DISCLOSURE_PROVING_KEY, &disc_r1cs_bytes)
++        .map_err(|e| JsError::new(&format!("failed to init disclosure prover: {e:#}")))?;
 
 -    WITNESS_CALC.with(|cell| {
 -        *cell.borrow_mut() = Some(witness_calc);
@@ -376,16 +604,58 @@ index b45ec6b..7273335 100644
      DISCLOSURE_WITNESS_CALC.with(|cell| {
          *cell.borrow_mut() = Some(disc_witness_calc);
      });
-@@ -202,7 +217,7 @@ pub fn worker_main() {
+@@ -202,7 +267,6 @@ pub fn worker_main() {
  }
 
  async fn init() -> Result<(), JsError> {
 -    load_circuit_artifacts().await?;
-+    load_policy_circuit_artifacts().await?;
      log::debug!("[{WORKER_NAME}] initialized");
 
      Ok(())
-@@ -235,12 +250,18 @@ pub(crate) async fn router(req: ProverWorkerRequest) -> Result<ProverWorkerRespo
+@@ -221,26 +285,50 @@ pub(crate) async fn router(req: ProverWorkerRequest) -> Result<ProverWorkerRespo
+     let resp = match req {
+         ProverWorkerRequest::Ping => {
+             log::trace!("[{WORKER_NAME}] ping");
+-            loop {
+-                let ready = WITNESS_CALC.with(|s| s.borrow().is_some())
+-                    && PROVER.with(|s| s.borrow().is_some());
+-
+-                if ready {
+-                    log::trace!("[{WORKER_NAME}] pong");
+-                    return Ok(ProverWorkerResponse::Pong);
+-                }
+-
+-                TimeoutFuture::new(50).await;
+-            }
++            ProverWorkerResponse::Pong
++        }
++        ProverWorkerRequest::LoadPolicyAssets => {
++            log::debug!("[{WORKER_NAME}] load policy assets");
++            load_policy_assets()
++                .await
++                .map_err(|e| anyhow::anyhow!("{e:?}"))?;
++            ProverWorkerResponse::Pong
++        }
++        ProverWorkerRequest::InitPolicyWitness => {
++            log::debug!("[{WORKER_NAME}] init policy witness");
++            init_policy_witness()
++                .await
++                .map_err(|e| anyhow::anyhow!("{e:?}"))?;
++            ProverWorkerResponse::Pong
++        }
++        ProverWorkerRequest::InitPolicyProver => {
++            log::debug!("[{WORKER_NAME}] init policy prover");
++            init_policy_prover()
++                .await
++                .map_err(|e| anyhow::anyhow!("{e:?}"))?;
++            ProverWorkerResponse::Pong
++        }
++        ProverWorkerRequest::LoadPolicy => {
++            log::debug!("[{WORKER_NAME}] load policy");
++            load_policy_circuit_artifacts()
++                .await
++                .map_err(|e| anyhow::anyhow!("{e:?}"))?;
++            ProverWorkerResponse::Pong
          }
          ProverWorkerRequest::Transact(params) => {
              log::debug!("[{WORKER_NAME}] transact");
@@ -404,7 +674,7 @@ index b45ec6b..7273335 100644
 
              let context = types::DisclosureContext {
                  network: req.network,
-@@ -318,6 +339,9 @@ pub(crate) async fn router(req: ProverWorkerRequest) -> Result<ProverWorkerRespo
+@@ -318,6 +406,9 @@ pub(crate) async fn router(req: ProverWorkerRequest) -> Result<ProverWorkerRespo
          // the app, while proving is app-initiated, so the responsibilities differ.
          ProverWorkerRequest::VerifyDisclosureProof(receipt, expected_vk_hash) => {
              log::debug!("[{WORKER_NAME}] verify disclosure proof");
