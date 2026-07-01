@@ -162,7 +162,10 @@ compile:
    used `commit_assets=false`, download the `nebula-private-prover-runtime`
    artifact, copy it into `apps/web/public/private-prover-runtime`, commit, and
    push.
-7. Open `/private-prover` on the Vercel deployment and run **Check assets**.
+7. Open `/private-prover` on the Vercel deployment, connect Freighter, and run
+   **Sign and prepare**. The page checks assets automatically and should
+   download `nebula-private-pool-prepared.json` after the browser proof
+   completes.
 
 If the upstream Stellar Private Payments testnet deployment does not include a USDC pool, deploy a Nebula-controlled upstream-compatible USDC pool first:
 
@@ -221,8 +224,6 @@ NEXT_PUBLIC_EVM_MOCK_USDC_ADDRESS=
 NEXT_PUBLIC_NEBULA_RELAY_CONTRACT_ID=
 NEXT_PUBLIC_RISC0_VERIFIER_ROUTER_ID=
 NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID=
-NEXT_PUBLIC_PRIVATE_PAYMENTS_ASP_MEMBERSHIP_ID=
-NEXT_PUBLIC_PRIVATE_PAYMENTS_DEPLOYMENT_LEDGER=
 NEXT_PUBLIC_PRIVATE_PROVER_RUNTIME_URL=/private-prover-runtime/nebula-prover-host.html
 NEXT_PUBLIC_PRIVATE_PROVER_ASSET_BASE_URL=/private-prover-runtime
 NEXT_PUBLIC_PRIVATE_PROVER_BOOTNODE_URL=

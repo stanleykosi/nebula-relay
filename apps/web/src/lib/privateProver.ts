@@ -1,5 +1,3 @@
-import { scValToNative, xdr } from "@stellar/stellar-sdk";
-
 export type PrivateProverAssetName =
   | "wasm-facade"
   | "web-module"
@@ -24,8 +22,6 @@ export interface PrivateProverConfig {
   bootnodeUrl?: string;
   networkPassphrase: string;
   poolId: string;
-  aspMembershipContractId: string;
-  privatePaymentsDeploymentLedger: number;
 }
 
 export interface PrivateProverPreparedPublic {
@@ -73,30 +69,9 @@ export interface PrivateProverProgressEvent {
   message?: string;
 }
 
-export interface AspMembershipLeafEvent {
-  id: string;
-  ledger: number;
-  leaf: string;
-  index: string;
-  root: string;
-  txHash?: string;
-}
-
-interface FindAspMembershipLeafEventOptions {
-  rpcUrl: string;
-  contractId: string;
-  startLedger: number;
-  leaf: string;
-  maxPages?: number;
-  pageLimit?: number;
-}
-
 const DEFAULT_RUNTIME_URL = "/private-prover-runtime/nebula-prover-host.html";
 const DEFAULT_ASSET_BASE_URL = "/private-prover-runtime";
 const DEFAULT_TESTNET_PASSPHRASE = "Test SDF Network ; September 2015";
-const DEFAULT_ASP_MEMBERSHIP_CONTRACT_ID =
-  "CCCZVCAZJNJBXESBNA5NSO2DUWXB3EAE2WASTTAWJL3TI7ATYEMP6HSB";
-const DEFAULT_PRIVATE_PAYMENTS_DEPLOYMENT_LEDGER = 3369482;
 
 export function privateProverConfig(): PrivateProverConfig {
   const assetBaseUrl =
@@ -113,13 +88,6 @@ export function privateProverConfig(): PrivateProverConfig {
       process.env.NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE ??
       DEFAULT_TESTNET_PASSPHRASE,
     poolId: readRequiredPublicEnv(process.env.NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID),
-    aspMembershipContractId:
-      readOptionalEnv(process.env.NEXT_PUBLIC_PRIVATE_PAYMENTS_ASP_MEMBERSHIP_ID) ??
-      DEFAULT_ASP_MEMBERSHIP_CONTRACT_ID,
-    privatePaymentsDeploymentLedger: readOptionalPositiveInteger(
-      process.env.NEXT_PUBLIC_PRIVATE_PAYMENTS_DEPLOYMENT_LEDGER,
-      DEFAULT_PRIVATE_PAYMENTS_DEPLOYMENT_LEDGER
-    ),
   };
 }
 
@@ -208,95 +176,12 @@ export function decodeSignatureBytes(input: string): number[] {
   return Array.from(binary, (char) => char.charCodeAt(0));
 }
 
-export async function findAspMembershipLeafEvent({
-  rpcUrl,
-  contractId,
-  startLedger,
-  leaf,
-  maxPages = 8,
-  pageLimit = 200,
-}: FindAspMembershipLeafEventOptions): Promise<AspMembershipLeafEvent | undefined> {
-  const expectedLeaf = normalizeFieldDecimal(leaf);
-  let cursor: string | undefined;
-
-  for (let page = 0; page < maxPages; page += 1) {
-    const params: Record<string, unknown> = {
-      filters: [
-        {
-          type: "contract",
-          contractIds: [contractId],
-          topics: [["**"]],
-        },
-      ],
-      pagination: cursor ? { cursor, limit: pageLimit } : { limit: pageLimit },
-    };
-    if (!cursor) {
-      params.startLedger = startLedger;
-    }
-
-    const response = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: `nebula-asp-${page}`,
-        method: "getEvents",
-        params,
-      }),
-    });
-    if (!response.ok) {
-      throw new Error(`Stellar RPC getEvents failed with HTTP ${response.status}`);
-    }
-
-    const payload = (await response.json()) as StellarRpcResponse;
-    if (payload.error) {
-      throw new Error(
-        `Stellar RPC getEvents failed: ${payload.error.message ?? payload.error.code}`
-      );
-    }
-
-    const result = payload.result;
-    if (!result?.events?.length) {
-      return undefined;
-    }
-
-    for (const event of result.events) {
-      if (event.contractId !== contractId || !event.value) {
-        continue;
-      }
-      const decoded = decodeLeafAddedEvent(event);
-      if (decoded?.leaf === expectedLeaf) {
-        return decoded;
-      }
-    }
-
-    if (!result.cursor || result.cursor === cursor) {
-      return undefined;
-    }
-    cursor = result.cursor;
-  }
-
-  return undefined;
-}
-
 function asset(name: PrivateProverAssetName, path: string) {
   return { name, path };
 }
 
 function readOptionalEnv(value: string | undefined): string | undefined {
   return value && value.trim() !== "" ? value : undefined;
-}
-
-function readOptionalPositiveInteger(
-  value: string | undefined,
-  fallback: number
-): number {
-  const trimmed = value?.trim() ?? "";
-  if (!trimmed) {
-    return fallback;
-  }
-  const parsed = Number.parseInt(trimmed, 10);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function readRequiredPublicEnv(value: string | undefined): string {
@@ -336,73 +221,4 @@ function getOptional(
 
 function arrayItem(value: unknown, index: number): unknown {
   return Array.isArray(value) ? value[index] : undefined;
-}
-
-interface StellarRpcResponse {
-  result?: {
-    events?: StellarRpcEvent[];
-    cursor?: string;
-  };
-  error?: {
-    code?: number;
-    message?: string;
-  };
-}
-
-interface StellarRpcEvent {
-  id: string;
-  ledger: number;
-  contractId: string;
-  txHash?: string;
-  value?: string;
-}
-
-function decodeLeafAddedEvent(
-  event: StellarRpcEvent
-): AspMembershipLeafEvent | undefined {
-  let decoded: unknown;
-  try {
-    decoded = scValToNative(xdr.ScVal.fromXDR(event.value ?? "", "base64"));
-  } catch {
-    return undefined;
-  }
-  if (!isRecord(decoded)) {
-    return undefined;
-  }
-  const leaf = fieldToDecimal(decoded.leaf);
-  const index = fieldToDecimal(decoded.index);
-  const root = fieldToDecimal(decoded.root);
-  if (!leaf || !index || !root) {
-    return undefined;
-  }
-  return {
-    id: event.id,
-    ledger: event.ledger,
-    txHash: event.txHash,
-    leaf,
-    index,
-    root,
-  };
-}
-
-function normalizeFieldDecimal(value: string): string {
-  const trimmed = value.trim();
-  return trimmed.startsWith("0x") ? BigInt(trimmed).toString() : BigInt(trimmed).toString();
-}
-
-function fieldToDecimal(value: unknown): string | undefined {
-  if (typeof value === "bigint") {
-    return value.toString();
-  }
-  if (typeof value === "number" && Number.isSafeInteger(value)) {
-    return value.toString();
-  }
-  if (typeof value === "string" && value.trim() !== "") {
-    return normalizeFieldDecimal(value);
-  }
-  return undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

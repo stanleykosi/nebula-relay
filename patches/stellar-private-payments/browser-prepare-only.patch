@@ -1,11 +1,20 @@
 diff --git a/app/crates/platforms/web/src/client/mod.rs b/app/crates/platforms/web/src/client/mod.rs
-index abfcab3..80981e5 100644
+index abfcab3..6b86583 100644
 --- a/app/crates/platforms/web/src/client/mod.rs
 +++ b/app/crates/platforms/web/src/client/mod.rs
-@@ -38,6 +38,13 @@ fn execute_hashes_to_js(result: Option<Vec<String>>) -> Result<JsValue, JsError>
+@@ -30,6 +30,8 @@ mod transact;
+
+ const CONFIRM_POLL_ATTEMPTS: u32 = 30;
+ const CONFIRM_POLL_INTERVAL_MS: u32 = 1_000;
++const PROVER_LOAD_TIMEOUT_MS: u32 = 180_000;
++const PROVER_TRANSACT_TIMEOUT_MS: u32 = 10 * 60_000;
+
+ fn execute_hashes_to_js(result: Option<Vec<String>>) -> Result<JsValue, JsError> {
+     match result {
+@@ -38,6 +40,13 @@ fn execute_hashes_to_js(result: Option<Vec<String>>) -> Result<JsValue, JsError>
      }
  }
- 
+
 +fn prepared_prover_tx_to_js(result: Option<PreparedProverTx>) -> Result<JsValue, JsError> {
 +    match result {
 +        None => Ok(JsValue::NULL),
@@ -16,10 +25,19 @@ index abfcab3..80981e5 100644
  fn emit_progress(
      on_status: &Option<Function>,
      flow: &'static str,
-@@ -631,6 +638,28 @@ impl WebClient {
+@@ -212,7 +221,7 @@ impl WebClient {
+
+     pub async fn ping_prover(&self) -> anyhow::Result<()> {
+         let mut bridge = self.prover_bridge.fork();
+-        let resp = with_timeout(5_000, bridge.run(ProverWorkerRequest::Ping)).await?;
++        let resp = with_timeout(PROVER_LOAD_TIMEOUT_MS, bridge.run(ProverWorkerRequest::Ping)).await?;
+         match resp {
+             ProverWorkerResponse::Pong => Ok(()),
+             ProverWorkerResponse::Error(e) => Err(anyhow::anyhow!(e)),
+@@ -631,6 +640,28 @@ impl WebClient {
          execute_hashes_to_js(result)
      }
- 
+
 +    #[wasm_bindgen(js_name = prepareDeposit)]
 +    #[allow(clippy::too_many_arguments)]
 +    pub async fn prepare_deposit(
@@ -45,10 +63,10 @@ index abfcab3..80981e5 100644
      #[wasm_bindgen(js_name = plan)]
      pub async fn plan(
          &self,
-@@ -740,6 +769,37 @@ impl WebClient {
+@@ -740,6 +771,37 @@ impl WebClient {
          execute_hashes_to_js(result)
      }
- 
+
 +    #[wasm_bindgen(js_name = prepareTransact)]
 +    #[allow(clippy::too_many_arguments)]
 +    pub async fn prepare_transact_wasm(
@@ -84,13 +102,31 @@ index abfcab3..80981e5 100644
      #[allow(clippy::too_many_arguments)]
      pub async fn generate_selective_disclosure(
 diff --git a/app/crates/platforms/web/src/client/transact.rs b/app/crates/platforms/web/src/client/transact.rs
-index a2736c7..d883514 100644
+index a2736c7..0fffb7e 100644
 --- a/app/crates/platforms/web/src/client/transact.rs
 +++ b/app/crates/platforms/web/src/client/transact.rs
+@@ -2,7 +2,7 @@
+ //! `executeTransfer`, `executeWithdraw`).
+
+ use super::{
+-    WebClient, emit_progress, parse_ext_amount_decimal, parse_input_note_ids,
++    PROVER_TRANSACT_TIMEOUT_MS, WebClient, emit_progress, parse_ext_amount_decimal, parse_input_note_ids,
+     parse_note_amount_decimal, parse_output_amounts, parse_output_recipient_keys,
+     parse_u32_decimal, sign::sign_prepared_transaction,
+ };
+@@ -207,7 +207,7 @@ impl WebClient {
+             .map_err(|e| JsError::new(&format!("failed to load prover: {e:?}")))?;
+
+         let prepared = match self
+-            .prover_request(ProverWorkerRequest::Transact(params), 20_000)
++            .prover_request(ProverWorkerRequest::Transact(params), PROVER_TRANSACT_TIMEOUT_MS)
+             .await?
+         {
+             ProverWorkerResponse::TransactPrepared(p) => p,
 @@ -299,6 +299,57 @@ impl WebClient {
          }))
      }
- 
+
 +    #[allow(clippy::too_many_arguments)]
 +    pub(super) async fn prepare_transact_inner(
 +        &self,
@@ -148,7 +184,7 @@ index a2736c7..d883514 100644
 @@ -356,6 +407,57 @@ impl WebClient {
          self.execute_transact(ctx, step, flow).await
      }
- 
+
 +    #[allow(clippy::too_many_arguments)]
 +    pub(super) async fn prepare_deposit_inner(
 +        &self,
@@ -203,3 +239,112 @@ index a2736c7..d883514 100644
      #[allow(clippy::too_many_arguments)]
      pub(super) async fn execute_deposit_inner(
          &self,
+diff --git a/app/crates/platforms/web/src/workers/prover.rs b/app/crates/platforms/web/src/workers/prover.rs
+index b45ec6b..a676f77 100644
+--- a/app/crates/platforms/web/src/workers/prover.rs
++++ b/app/crates/platforms/web/src/workers/prover.rs
+@@ -84,7 +84,7 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
+     if WITNESS_CALC.with(|s| s.borrow().is_some()) && PROVER.with(|s| s.borrow().is_some()) {
+         return Ok(());
+     }
+-    let (wasm_bytes, r1cs_bytes, disc_wasm_bytes, disc_r1cs_bytes) = try_join!(
++    let (wasm_bytes, r1cs_bytes) = try_join!(
+         async {
+             let wasm_bytes: Vec<u8> = fetch_circuit_file("circuits/policy_tx_2_2.wasm").await?;
+             log::debug!(
+@@ -100,29 +100,12 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
+                 r1cs_bytes.len()
+             );
+             Ok::<Vec<u8>, JsError>(r1cs_bytes)
+-        },
+-        async {
+-            let wasm_bytes: Vec<u8> =
+-                fetch_circuit_file("circuits/selectiveDisclosure_1.wasm").await?;
+-            log::debug!(
+-                "[{WORKER_NAME}] fetched selectiveDisclosure_1.wasm: {} bytes",
+-                wasm_bytes.len()
+-            );
+-            Ok::<Vec<u8>, JsError>(wasm_bytes)
+-        },
+-        async {
+-            let r1cs_bytes: Vec<u8> =
+-                fetch_circuit_file("circuits/selectiveDisclosure_1.r1cs").await?;
+-            log::debug!(
+-                "[{WORKER_NAME}] fetched selectiveDisclosure_1.r1cs: {} bytes",
+-                r1cs_bytes.len()
+-            );
+-            Ok::<Vec<u8>, JsError>(r1cs_bytes)
+         }
+     )?;
+
+-    // Integrity checks (regular builds): ensure we are using the exact
+-    // artifact versions this binary was built against.
++    // Load and expose the transaction prover first. Deposit preparation does
++    // not need the selective-disclosure prover, so waiting for disclosure
++    // artifacts here makes the browser path unnecessarily fragile.
+     ensure_sha256_matches(
+         "policy_tx_2_2_proving_key.bin",
+         PROVING_KEY,
+@@ -142,6 +125,38 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
+         crate::artifact_hashes::EXPECTED_POLICY_TX_2_2_R1CS_SHA256,
+     )?;
+
++    let witness_calc = WitnessCalculator::new(&wasm_bytes, &r1cs_bytes)
++        .map_err(|e| JsError::new(&format!("failed to init witness calculator: {e:#}")))?;
++    let prover = Prover::new(PROVING_KEY, &r1cs_bytes).expect("FAILED Prover");
++
++    WITNESS_CALC.with(|cell| {
++        *cell.borrow_mut() = Some(witness_calc);
++    });
++    PROVER.with(|cell| {
++        *cell.borrow_mut() = Some(prover);
++    });
++
++    let (disc_wasm_bytes, disc_r1cs_bytes) = try_join!(
++        async {
++            let wasm_bytes: Vec<u8> =
++                fetch_circuit_file("circuits/selectiveDisclosure_1.wasm").await?;
++            log::debug!(
++                "[{WORKER_NAME}] fetched selectiveDisclosure_1.wasm: {} bytes",
++                wasm_bytes.len()
++            );
++            Ok::<Vec<u8>, JsError>(wasm_bytes)
++        },
++        async {
++            let r1cs_bytes: Vec<u8> =
++                fetch_circuit_file("circuits/selectiveDisclosure_1.r1cs").await?;
++            log::debug!(
++                "[{WORKER_NAME}] fetched selectiveDisclosure_1.r1cs: {} bytes",
++                r1cs_bytes.len()
++            );
++            Ok::<Vec<u8>, JsError>(r1cs_bytes)
++        }
++    )?;
++
+     ensure_sha256_matches(
+         "selectiveDisclosure_1_proving_key.bin",
+         DISCLOSURE_PROVING_KEY,
+@@ -161,10 +176,6 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
+         crate::artifact_hashes::EXPECTED_SELECTIVE_DISCLOSURE_1_R1CS_SHA256,
+     )?;
+
+-    let witness_calc = WitnessCalculator::new(&wasm_bytes, &r1cs_bytes)
+-        .map_err(|e| JsError::new(&format!("failed to init witness calculator: {e:#}")))?;
+-    let prover = Prover::new(PROVING_KEY, &r1cs_bytes).expect("FAILED Prover");
+-
+     let disc_witness_calc =
+         WitnessCalculator::new(&disc_wasm_bytes, &disc_r1cs_bytes).map_err(|e| {
+             JsError::new(&format!(
+@@ -174,12 +185,6 @@ async fn load_circuit_artifacts() -> Result<(), JsError> {
+     let disc_prover =
+         Prover::new(DISCLOSURE_PROVING_KEY, &disc_r1cs_bytes).expect("FAILED Disclosure Prover");
+
+-    WITNESS_CALC.with(|cell| {
+-        *cell.borrow_mut() = Some(witness_calc);
+-    });
+-    PROVER.with(|cell| {
+-        *cell.borrow_mut() = Some(prover);
+-    });
+     DISCLOSURE_WITNESS_CALC.with(|cell| {
+         *cell.borrow_mut() = Some(disc_witness_calc);
+     });
