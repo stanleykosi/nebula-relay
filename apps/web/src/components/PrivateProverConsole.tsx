@@ -1,12 +1,7 @@
 "use client";
 
 import {
-  CheckCircle2,
-  Download,
-  FileJson,
   KeyRound,
-  RadioTower,
-  ShieldCheck,
   Wallet,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -74,6 +69,9 @@ type AspRegistrationPayload = {
   membershipLeaf: string;
 };
 
+const PREPARED_JSON = "nebula-private-pool-prepared.json";
+const ASP_REQUEST_JSON = "nebula-asp-membership-request.json";
+
 export function PrivateProverConsole() {
   const config = useMemo(() => privateProverConfig(), []);
   const runtimeOrigin = useMemo(
@@ -85,6 +83,7 @@ export function PrivateProverConsole() {
   );
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pending = useRef(new Map<string, PendingRequest>());
+  const autoInitStarted = useRef(false);
 
   const [runtimeReady, setRuntimeReady] = useState(false);
   const [assetStatus, setAssetStatus] = useState<PrivateProverAssetStatus[]>(
@@ -94,7 +93,6 @@ export function PrivateProverConsole() {
   const [patchedPrepareOnly, setPatchedPrepareOnly] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
   const [amount, setAmount] = useState("10000000");
-  const [signatureInput, setSignatureInput] = useState("");
   const [derivedKeys, setDerivedKeys] = useState<DerivedKeys>();
   const [aspRegistration, setAspRegistration] =
     useState<AspRegistrationPayload>();
@@ -218,6 +216,17 @@ export function PrivateProverConsole() {
       );
     });
 
+  useEffect(() => {
+    if (!runtimeReady || autoInitStarted.current) {
+      return;
+    }
+    autoInitStarted.current = true;
+    void (async () => {
+      await checkAssets();
+      await initializeRuntime();
+    })();
+  }, [runtimeReady]);
+
   const connectStellar = async () =>
     run("Connecting Stellar wallet", async () => {
       const address = await requestFreighterAddress();
@@ -226,7 +235,7 @@ export function PrivateProverConsole() {
     });
 
   const signWithFreighter = async () =>
-    run("Signing privacy key seed", async () => {
+    run("Signing and preparing private proof", async () => {
       if (!walletAddress) {
         throw new Error("Connect a Stellar wallet first");
       }
@@ -235,16 +244,13 @@ export function PrivateProverConsole() {
         address: walletAddress,
         networkPassphrase: config.networkPassphrase,
       });
-      setSignatureInput(response.signedMessage);
-      await deriveKeys(response.signedMessage);
+      await deriveKeys(response.signedMessage, { autoPrepare: true });
     });
 
-  const deriveFromManualSignature = async () =>
-    run("Deriving private note keys", async () => {
-      await deriveKeys(signatureInput);
-    });
-
-  const deriveKeys = async (signature: string) => {
+  const deriveKeys = async (
+    signature: string,
+    options: { autoPrepare?: boolean } = {}
+  ) => {
     if (!walletAddress) {
       throw new Error("Wallet address is required");
     }
@@ -260,77 +266,75 @@ export function PrivateProverConsole() {
     setDerivedKeys(result);
     setAspRegistration(registration);
     setStatus("Private note keys ready");
+    if (options.autoPrepare) {
+      await prepareOrExportAspRequest(registration);
+    }
   };
 
-  const prepareDeposit = async () =>
-    run("Preparing private pool proof", async () => {
-      if (!walletAddress) {
-        throw new Error("Wallet address is required");
+  const prepareOrExportAspRequest = async (
+    registration: AspRegistrationPayload
+  ) => {
+    setStatus("Preparing private pool proof");
+    try {
+      const result = await prepareDepositFromRuntime();
+      downloadJson(PREPARED_JSON, result);
+      publishPrepared(result);
+      setStatus("PreparedProverTx exported and saved for Nebula");
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      if (!isAspRegistrationRequired(message)) {
+        throw caught;
       }
-      if (!config.poolId) {
-        throw new Error("NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID is required");
-      }
-      if (!derivedKeys) {
-        throw new Error("Derive private note keys first");
-      }
-      const result = await sendRuntime<PrivateProverResult>("prepareDeposit", {
-        poolId: config.poolId,
-        address: walletAddress,
-        amount,
-        outputAmounts: [amount, "0"],
-      });
-      setPreparedResult(result);
-      window.localStorage.setItem(
-        "nebula.privateProver.latest",
-        JSON.stringify(result)
+      downloadJson(ASP_REQUEST_JSON, registration);
+      setError(
+        "ASP membership registration is required before this wallet can prepare a pool proof. The membership request JSON was exported."
       );
-      setStatus("PreparedProverTx ready");
+      setStatus("ASP membership request exported");
+    }
+  };
+
+  const prepareDepositFromRuntime = async (): Promise<PrivateProverResult> => {
+    if (!walletAddress) {
+      throw new Error("Wallet address is required");
+    }
+    if (!config.poolId) {
+      throw new Error("NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID is required");
+    }
+    const result = await sendRuntime<PrivateProverResult>("prepareDeposit", {
+      poolId: config.poolId,
+      address: walletAddress,
+      amount,
+      outputAmounts: [amount, "0"],
     });
+    setPreparedResult(result);
+    window.localStorage.setItem(
+      "nebula.privateProver.latest",
+      JSON.stringify(result)
+    );
+    return result;
+  };
 
-  const downloadAspRegistration = () => {
-    if (!aspRegistration) {
-      return;
-    }
+  const downloadJson = (filename: string, value: unknown) => {
     const url = URL.createObjectURL(
-      new Blob([JSON.stringify(aspRegistration, null, 2)], {
+      new Blob([JSON.stringify(value, null, 2)], {
         type: "application/json",
       })
     );
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "nebula-asp-membership-request.json";
+    anchor.download = filename;
     anchor.click();
     URL.revokeObjectURL(url);
   };
 
-  const downloadPrepared = () => {
-    if (!preparedResult) {
-      return;
-    }
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(preparedResult, null, 2)], {
-        type: "application/json",
-      })
-    );
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "nebula-private-pool-prepared.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const returnToNebula = () => {
-    if (!preparedResult) {
-      return;
-    }
+  const publishPrepared = (result: PrivateProverResult) => {
     window.opener?.postMessage(
       {
         type: "nebula:private-prover:prepared",
-        result: preparedResult,
+        result,
       },
       window.location.origin
     );
-    setStatus("PreparedProverTx saved for Nebula");
   };
 
   const assetsOk =
@@ -369,18 +373,6 @@ export function PrivateProverConsole() {
             Browser-hosted Stellar Private Payments runtime for Nebula private
             note preparation.
           </p>
-          <div className="actions">
-            <ActionButton onClick={() => void checkAssets()}>
-              <FileJson size={16} /> Check assets
-            </ActionButton>
-            <ActionButton
-              onClick={() => void initializeRuntime()}
-              disabled={!runtimeReady}
-              variant="primary"
-            >
-              <RadioTower size={16} /> Initialize
-            </ActionButton>
-          </div>
           <HashRow label="Runtime URL" value={config.runtimeUrl} />
           <HashRow label="Asset base" value={config.assetBaseUrl} />
           <HashRow label="RPC" value={config.stellarRpcUrl} />
@@ -409,7 +401,7 @@ export function PrivateProverConsole() {
               onClick={() => void signWithFreighter()}
               disabled={!initialized || !walletAddress}
             >
-              <KeyRound size={16} /> Sign keys
+              <KeyRound size={16} /> Sign and prepare
             </ActionButton>
           </div>
           <label className="field">
@@ -421,23 +413,6 @@ export function PrivateProverConsole() {
               spellCheck={false}
             />
           </label>
-          <label className="field">
-            <span>Signature</span>
-            <textarea
-              className="textarea"
-              value={signatureInput}
-              onChange={(event) => setSignatureInput(event.target.value)}
-              spellCheck={false}
-            />
-          </label>
-          <div className="actions">
-            <ActionButton
-              onClick={() => void deriveFromManualSignature()}
-              disabled={!initialized || !walletAddress || !signatureInput}
-            >
-              <KeyRound size={16} /> Derive keys
-            </ActionButton>
-          </div>
           <HashRow
             label="Note public key"
             value={derivedKeys?.keys?.noteKeypair?.public}
@@ -454,20 +429,12 @@ export function PrivateProverConsole() {
             label="ASP membership blinding"
             value={derivedKeys?.aspSecret?.membershipBlinding}
           />
-          <div className="actions">
-            <ActionButton
-              onClick={downloadAspRegistration}
-              disabled={!aspRegistration}
-            >
-              <Download size={16} /> Export ASP request
-            </ActionButton>
-          </div>
         </Panel>
 
-        <Panel title="3. Prepare pool proof" className="span-7">
+        <Panel title="3. Prepared output" className="span-7">
           <p>
-            Generates the upstream private-pool `PreparedProverTx` in this
-            browser and exposes the first output commitment to Nebula.
+            The signed flow prepares the upstream private-pool output in this
+            browser and stores the result for Nebula.
           </p>
           <label className="field">
             <span>Amount, base units</span>
@@ -479,21 +446,6 @@ export function PrivateProverConsole() {
               spellCheck={false}
             />
           </label>
-          <div className="actions">
-            <ActionButton
-              variant="primary"
-              onClick={() => void prepareDeposit()}
-              disabled={!initialized || !patchedPrepareOnly || !derivedKeys}
-            >
-              <ShieldCheck size={16} /> Prepare proof
-            </ActionButton>
-            <ActionButton onClick={downloadPrepared} disabled={!preparedResult}>
-              <Download size={16} /> Export JSON
-            </ActionButton>
-            <ActionButton onClick={returnToNebula} disabled={!preparedResult}>
-              <CheckCircle2 size={16} /> Return to Nebula
-            </ActionButton>
-          </div>
           <HashRow label="Pool" value={config.poolId} />
           <HashRow
             label="Output commitment"
@@ -517,5 +469,14 @@ export function PrivateProverConsole() {
         </Panel>
       </div>
     </div>
+  );
+}
+
+function isAspRegistrationRequired(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("not registered in the asp membership tree") ||
+    normalized.includes("asp membership registration is required") ||
+    normalized.includes("register the asp membership leaf")
   );
 }
