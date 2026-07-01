@@ -1,0 +1,118 @@
+name: Build private prover assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_assets:
+        description: "Commit staged prover assets back to this branch"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: private-prover-assets-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-private-prover-assets:
+    name: Build patched Stellar Private Payments browser bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout Nebula Relay
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Rust toolchain
+        working-directory: vendor/stellar-private-payments
+        run: |
+          rustup toolchain install 1.92.0 --profile minimal
+          rustup target add wasm32v1-none wasm32-unknown-unknown --toolchain 1.92.0
+
+      - name: Cache Cargo and upstream target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vendor/stellar-private-payments/target
+          key: private-prover-${{ runner.os }}-${{ hashFiles('vendor/stellar-private-payments/Cargo.lock', 'vendor/stellar-private-payments/Trunk.toml', 'vendor/stellar-private-payments/rust-toolchain.toml', 'patches/stellar-private-payments/browser-prepare-only.patch') }}
+          restore-keys: |
+            private-prover-${{ runner.os }}-
+
+      - name: Install Trunk
+        working-directory: vendor/stellar-private-payments
+        run: |
+          cargo install trunk --locked
+
+      - name: Apply Nebula prepare-only browser patch
+        working-directory: vendor/stellar-private-payments
+        run: |
+          git apply --check ../../patches/stellar-private-payments/browser-prepare-only.patch
+          git apply ../../patches/stellar-private-payments/browser-prepare-only.patch
+
+      - name: Build upstream browser prover bundle
+        working-directory: vendor/stellar-private-payments
+        env:
+          DIST_DIR: ${{ github.workspace }}/.private-prover-dist
+          PUBLIC_URL: /private-prover-runtime/
+        run: |
+          make release DIST_DIR="$DIST_DIR" PUBLIC_URL="$PUBLIC_URL"
+          mkdir -p "$DIST_DIR/js"
+          cp app/js/wasm-facade.js "$DIST_DIR/js/wasm-facade.js"
+          grep -q "prepareDeposit" "$DIST_DIR/js/web.js"
+
+      - name: Stage Nebula private prover runtime
+        env:
+          PRIVATE_PROVER_UPSTREAM_DIST: ${{ github.workspace }}/.private-prover-dist
+        run: |
+          bash scripts/stage_private_prover_runtime.sh
+
+      - name: Validate staged runtime assets
+        run: |
+          test -f apps/web/public/private-prover-runtime/js/wasm-facade.js
+          test -f apps/web/public/private-prover-runtime/js/web.js
+          test -f apps/web/public/private-prover-runtime/js/web_bg.wasm
+          test -f apps/web/public/private-prover-runtime/js/storage-worker.js
+          test -f apps/web/public/private-prover-runtime/js/storage-worker_bg.wasm
+          test -f apps/web/public/private-prover-runtime/js/prover-worker.js
+          test -f apps/web/public/private-prover-runtime/js/prover-worker_bg.wasm
+          test -f apps/web/public/private-prover-runtime/circuits/policy_tx_2_2.wasm
+          test -f apps/web/public/private-prover-runtime/circuits/policy_tx_2_2.r1cs
+          test -f apps/web/public/private-prover-runtime/circuits/selectiveDisclosure_1.wasm
+          test -f apps/web/public/private-prover-runtime/circuits/selectiveDisclosure_1.r1cs
+
+      - name: Upload runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nebula-private-prover-runtime
+          path: apps/web/public/private-prover-runtime
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Commit runtime assets
+        if: inputs.commit_assets == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/public/private-prover-runtime
+          if git diff --cached --quiet; then
+            echo "No private prover runtime asset changes to commit."
+          else
+            git commit -m "Add browser private prover runtime assets"
+            git push origin HEAD:${{ github.ref_name }}
+          fi

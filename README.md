@@ -146,6 +146,24 @@ The staging script expects an already-built upstream bundle at
 `vendor/stellar-private-payments/app/dist` unless `PRIVATE_PROVER_UPSTREAM_DIST`
 is set. It does not run the heavy Circom/Rust build.
 
+The recommended way to build those assets is GitHub Actions, not a local WSL
+compile:
+
+1. Push this repo with `.github/workflows/build-private-prover-assets.yml`.
+2. Open GitHub -> Actions -> **Build private prover assets**.
+3. Click **Run workflow**.
+4. Keep `commit_assets=true` if you want the workflow to commit the generated
+   runtime files back to the branch automatically.
+5. Wait for the workflow to finish. It applies
+   `patches/stellar-private-payments/browser-prepare-only.patch`, runs the
+   upstream `make release`, stages `apps/web/public/private-prover-runtime`,
+   uploads an artifact, and optionally commits the files.
+6. If the workflow committed files, Vercel redeploys from that commit. If you
+   used `commit_assets=false`, download the `nebula-private-prover-runtime`
+   artifact, copy it into `apps/web/public/private-prover-runtime`, commit, and
+   push.
+7. Open `/private-prover` on the Vercel deployment and run **Check assets**.
+
 If the upstream Stellar Private Payments testnet deployment does not include a USDC pool, deploy a Nebula-controlled upstream-compatible USDC pool first:
 
 ```bash

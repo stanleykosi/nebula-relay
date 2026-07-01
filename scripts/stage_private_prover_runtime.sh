@@ -44,4 +44,21 @@ cp "$SRC_DIR/circuits/policy_tx_2_2.r1cs" "$DEST_DIR/circuits/policy_tx_2_2.r1cs
 cp "$SRC_DIR/circuits/selectiveDisclosure_1.wasm" "$DEST_DIR/circuits/selectiveDisclosure_1.wasm"
 cp "$SRC_DIR/circuits/selectiveDisclosure_1.r1cs" "$DEST_DIR/circuits/selectiveDisclosure_1.r1cs"
 
+for file in LICENSE.txt NOTICE.txt; do
+  if [ -f "$SRC_DIR/$file" ]; then
+    cp "$SRC_DIR/$file" "$DEST_DIR/$file"
+  fi
+done
+
+if [ -d "$SRC_DIR/licenses" ]; then
+  rm -rf "$DEST_DIR/licenses"
+  cp -R "$SRC_DIR/licenses" "$DEST_DIR/licenses"
+fi
+
+for file in NOTICE.txt source-bundle.tar.gz; do
+  if [ -f "$SRC_DIR/circuits/$file" ]; then
+    cp "$SRC_DIR/circuits/$file" "$DEST_DIR/circuits/$file"
+  fi
+done
+
 echo "Staged private prover runtime assets in $DEST_DIR"
