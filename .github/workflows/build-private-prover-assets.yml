@@ -128,5 +128,7 @@ jobs:
             echo "No private prover runtime asset changes to commit."
           else
             git commit -m "Add browser private prover runtime assets"
-            git push origin HEAD:${{ github.ref_name }}
+            git fetch origin "${GITHUB_REF_NAME}"
+            git rebase "origin/${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
