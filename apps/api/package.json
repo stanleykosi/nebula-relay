@@ -1,0 +1,31 @@
+{
+  "name": "@nebula/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "node ../../node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/bin/tsc -p tsconfig.json",
+    "lint": "node ../../node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "typecheck": "node ../../node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "test": "node ../../node_modules/.pnpm/vitest@4.0.16/node_modules/vitest/vitest.mjs run src",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@nebula/cctp-client": "workspace:*",
+    "@nebula/core": "workspace:*",
+    "@nebula/evm-client": "workspace:*",
+    "@nebula/stellar-client": "workspace:*",
+    "@stellar/stellar-sdk": "^16.0.1",
+    "pg": "^8.16.3",
+    "redis": "^5.10.0",
+    "viem": "^2.53.1",
+    "zod": "4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "@types/pg": "^8.15.6",
+    "vitest": "4.0.16"
+  }
+}

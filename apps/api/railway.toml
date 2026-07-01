@@ -1,0 +1,18 @@
+[build]
+builder = "RAILPACK"
+buildCommand = "pnpm --filter @nebula/api... build && cargo build -p nebula-host --release"
+watchPatterns = [
+  "/apps/api/**",
+  "/packages/**",
+  "/risc0/**",
+  "/Cargo.toml",
+  "/Cargo.lock",
+  "/contracts/stellar/**"
+]
+
+[deploy]
+startCommand = "pnpm --filter @nebula/api start"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
