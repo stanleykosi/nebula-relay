@@ -241,7 +241,7 @@ index abfcab3..49c7420 100644
      #[allow(clippy::too_many_arguments)]
      pub async fn generate_selective_disclosure(
 diff --git a/app/crates/platforms/web/src/client/transact.rs b/app/crates/platforms/web/src/client/transact.rs
-index a2736c7..085b9a6 100644
+index a2736c7..f99f97c 100644
 --- a/app/crates/platforms/web/src/client/transact.rs
 +++ b/app/crates/platforms/web/src/client/transact.rs
 @@ -2,9 +2,9 @@
@@ -257,7 +257,15 @@ index a2736c7..085b9a6 100644
  };
  use crate::protocol::{
      PreparedProverTx, ProverWorkerRequest, ProverWorkerResponse, StorageWorkerRequest,
-@@ -201,13 +201,18 @@ impl WebClient {
+@@ -83,6 +83,7 @@ impl WebClient {
+         step: &Transact,
+         flow: &'static str,
+         on_status: &Option<Function>,
++        simulate_tx: bool,
+     ) -> Result<Option<PreparedProverTx>, JsError> {
+         emit_progress(
+             on_status,
+@@ -201,13 +202,18 @@ impl WebClient {
              }
          };
 
@@ -279,7 +287,40 @@ index a2736c7..085b9a6 100644
              .await?
          {
              ProverWorkerResponse::TransactPrepared(p) => p,
-@@ -299,6 +304,57 @@ impl WebClient {
+@@ -219,10 +225,20 @@ impl WebClient {
+             }
+         };
+
+-        let prepared = self
+-            .finalize_prepared_prover_tx(pool_contract_id, user_address, prepared, on_status, flow)
+-            .await?;
+-        Ok(Some(prepared))
++        if simulate_tx {
++            let prepared = self
++                .finalize_prepared_prover_tx(
++                    pool_contract_id,
++                    user_address,
++                    prepared,
++                    on_status,
++                    flow,
++                )
++                .await?;
++            Ok(Some(prepared))
++        } else {
++            Ok(Some(prepared))
++        }
+     }
+
+     async fn execute_transact(
+@@ -277,6 +293,7 @@ impl WebClient {
+                 step,
+                 flow,
+                 &ctx.on_status,
++                true,
+             )
+             .await?;
+         let Some(prepared) = prepared else {
+@@ -299,6 +316,64 @@ impl WebClient {
          }))
      }
 
@@ -330,14 +371,21 @@ index a2736c7..085b9a6 100644
 +            out_enc_pks,
 +        );
 +
-+        self.prove_transact_inner(&pool_contract_id, &user_address, &step, flow, &on_status)
-+            .await
++        self.prove_transact_inner(
++            &pool_contract_id,
++            &user_address,
++            &step,
++            flow,
++            &on_status,
++            false,
++        )
++        .await
 +    }
 +
      #[allow(clippy::too_many_arguments)]
      pub(super) async fn execute_transact_inner(
          &self,
-@@ -356,6 +412,57 @@ impl WebClient {
+@@ -356,6 +431,58 @@ impl WebClient {
          self.execute_transact(ctx, step, flow).await
      }
 
@@ -388,6 +436,7 @@ index a2736c7..085b9a6 100644
 +            &step,
 +            "prepareDeposit",
 +            &on_status,
++            false,
 +        )
 +        .await
 +    }
