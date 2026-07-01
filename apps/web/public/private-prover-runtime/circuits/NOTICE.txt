@@ -18,7 +18,7 @@ Licenses:
 
 Build provenance:
 - The repository commit: 10352700afb56861bf3e67b1bf62a628300c2c45
-- Build date (UTC): 2026-07-01T12:24:21Z
+- Build date (UTC): 2026-07-01T13:24:05Z
 - circomlib revision: 35e54ea21da3e8762557234298dbb553c175ea8d
 
 Corresponding Source / rebuild:
