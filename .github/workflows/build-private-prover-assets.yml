@@ -50,7 +50,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             vendor/stellar-private-payments/target
-          key: private-prover-${{ runner.os }}-${{ hashFiles('vendor/stellar-private-payments/Cargo.lock', 'vendor/stellar-private-payments/Trunk.toml', 'vendor/stellar-private-payments/rust-toolchain.toml', 'patches/stellar-private-payments/browser-prepare-only.patch') }}
+          key: private-prover-${{ runner.os }}-${{ hashFiles('vendor/stellar-private-payments/Cargo.lock', 'vendor/stellar-private-payments/Trunk.toml', 'vendor/stellar-private-payments/rust-toolchain.toml', 'patches/stellar-private-payments/browser-prepare-only.patch', 'deployments/stellar-private-payments-usdc-testnet.json') }}
           restore-keys: |
             private-prover-${{ runner.os }}-
 
@@ -64,6 +64,17 @@ jobs:
         run: |
           git apply --check ../../patches/stellar-private-payments/browser-prepare-only.patch
           git apply ../../patches/stellar-private-payments/browser-prepare-only.patch
+
+      - name: Use Nebula USDC private-pool deployment config
+        run: |
+          cp deployments/stellar-private-payments-usdc-testnet.json vendor/stellar-private-payments/deployments/testnet/deployments.json
+          node -e '
+            const fs = require("fs");
+            const deployment = JSON.parse(fs.readFileSync("vendor/stellar-private-payments/deployments/testnet/deployments.json", "utf8"));
+            const pool = deployment.pools?.find((entry) => entry.enabled && entry.asset?.code === "USDC");
+            if (!pool) throw new Error("Nebula USDC private-pool deployment config is missing an enabled USDC pool");
+            console.log(`Bundling private pool ${pool.poolContractId}`);
+          '
 
       - name: Build upstream browser prover bundle
         working-directory: vendor/stellar-private-payments
@@ -79,6 +90,7 @@ jobs:
       - name: Stage Nebula private prover runtime
         env:
           PRIVATE_PROVER_UPSTREAM_DIST: ${{ github.workspace }}/.private-prover-dist
+          PRIVATE_PROVER_EXPECTED_POOL_ID: CC4XGYEOY4SLBG4X7YDXGGDJ6C5GLLHPXCNILZYTE5MQGJGJHC75JDES
         run: |
           bash scripts/stage_private_prover_runtime.sh
 
@@ -95,6 +107,8 @@ jobs:
           test -f apps/web/public/private-prover-runtime/circuits/policy_tx_2_2.r1cs
           test -f apps/web/public/private-prover-runtime/circuits/selectiveDisclosure_1.wasm
           test -f apps/web/public/private-prover-runtime/circuits/selectiveDisclosure_1.r1cs
+          grep -a -q "CC4XGYEOY4SLBG4X7YDXGGDJ6C5GLLHPXCNILZYTE5MQGJGJHC75JDES" apps/web/public/private-prover-runtime/js/web_bg.wasm
+          grep -a -q "USDC" apps/web/public/private-prover-runtime/js/web_bg.wasm
 
       - name: Upload runtime artifact
         uses: actions/upload-artifact@v4

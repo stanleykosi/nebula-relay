@@ -73,7 +73,7 @@ export function privateProverConfig(): PrivateProverConfig {
     networkPassphrase:
       process.env.NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE ??
       DEFAULT_TESTNET_PASSPHRASE,
-    poolId: process.env.NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID ?? "",
+    poolId: readRequiredPublicEnv(process.env.NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID),
   };
 }
 
@@ -149,4 +149,9 @@ function asset(name: PrivateProverAssetName, path: string) {
 
 function readOptionalEnv(value: string | undefined): string | undefined {
   return value && value.trim() !== "" ? value : undefined;
+}
+
+function readRequiredPublicEnv(value: string | undefined): string {
+  const trimmed = value?.trim() ?? "";
+  return trimmed && trimmed !== "TBD" ? trimmed : "";
 }

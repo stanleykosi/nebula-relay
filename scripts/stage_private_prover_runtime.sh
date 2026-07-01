@@ -61,4 +61,10 @@ for file in NOTICE.txt source-bundle.tar.gz; do
   fi
 done
 
+if [ -n "${PRIVATE_PROVER_EXPECTED_POOL_ID:-}" ]; then
+  if ! grep -a -q "$PRIVATE_PROVER_EXPECTED_POOL_ID" "$DEST_DIR/js/web_bg.wasm"; then
+    fail "staged browser prover runtime does not contain expected private pool $PRIVATE_PROVER_EXPECTED_POOL_ID"
+  fi
+fi
+
 echo "Staged private prover runtime assets in $DEST_DIR"
