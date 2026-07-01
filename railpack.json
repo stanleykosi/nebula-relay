@@ -3,6 +3,6 @@
   "provider": "node",
   "packages": {
     "node": "22",
-    "rust": "1.89.0"
+    "rust": "1.91.1"
   }
 }
