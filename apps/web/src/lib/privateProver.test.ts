@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   decodeSignatureBytes,
   extractOutputCommitment,
+  findAspMembershipLeafEvent,
   normalizeBaseUrl,
   privateProverAssetPaths,
   type PreparedProverTx,
@@ -95,5 +96,48 @@ describe("private prover helpers", () => {
   it("decodes Freighter base64 and manual hex signatures", () => {
     expect(decodeSignatureBytes("AQID")).toEqual([1, 2, 3]);
     expect(decodeSignatureBytes("0x010203")).toEqual([1, 2, 3]);
+  });
+
+  it("finds a registered ASP membership leaf in raw Stellar RPC events", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "nebula-asp-0",
+          result: {
+            cursor: "0014509383073398783-4294967295",
+            events: [
+              {
+                id: "0014508897742127104-0000000000",
+                ledger: 3378116,
+                contractId: "CCCZVCAZJNJBXESBNA5NSO2DUWXB3EAE2WASTTAWJL3TI7ATYEMP6HSB",
+                txHash:
+                  "89e3d7388a9a9265899b85cf2d4c07ec773aa69628cc000a9334de0f8dad5153",
+                value:
+                  "AAAAEQAAAAEAAAADAAAADwAAAAVpbmRleAAAAAAAAAUAAAAAAAAAAAAAAA8AAAAEbGVhZgAAAAsiS7iXwkmv8g8oX0xWaV/j8EqtfjosIHK1D8PePxxJnwAAAA8AAAAEcm9vdAAAAAsd4KZsQ1EgPNiOtCol0WbcYbwTO0qEzowPQmCWttbJCQ==",
+              },
+            ],
+          },
+        }),
+        { status: 200 }
+      );
+
+    try {
+      await expect(
+        findAspMembershipLeafEvent({
+          rpcUrl: "https://soroban-testnet.stellar.org",
+          contractId: "CCCZVCAZJNJBXESBNA5NSO2DUWXB3EAE2WASTTAWJL3TI7ATYEMP6HSB",
+          startLedger: 3369482,
+          leaf: "0x224bb897c249aff20f285f4c56695fe3f04aad7e3a2c2072b50fc3de3f1c499f",
+        })
+      ).resolves.toMatchObject({
+        index: "0",
+        leaf: "15512424394430090008354503089307654523564750332006071462299399179645868591519",
+        root: "13513994960082187451543450515948533455801785531258806348506385143374416365833",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

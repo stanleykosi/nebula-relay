@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   checkPrivateProverAssets,
   decodeSignatureBytes,
+  findAspMembershipLeafEvent,
   privateProverConfig,
   type PrivateProverAssetStatus,
   type PrivateProverProgressEvent,
@@ -319,6 +320,16 @@ export function PrivateProverConsole() {
       throw new Error("Wallet address is required");
     }
     const signatureBytes = decodeSignatureBytes(signature);
+    await deriveKeysFromSignatureBytes(signatureBytes, options);
+  };
+
+  const deriveKeysFromSignatureBytes = async (
+    signatureBytes: number[],
+    options: { autoPrepare?: boolean } = {}
+  ) => {
+    if (!walletAddress) {
+      throw new Error("Wallet address is required");
+    }
     const result = await sendRuntime<DerivedKeys>("deriveKeys", {
       address: walletAddress,
       signatureBytes,
@@ -331,12 +342,14 @@ export function PrivateProverConsole() {
     setAspRegistration(registration);
     setStatus("Private note keys ready");
     if (options.autoPrepare) {
-      await prepareOrExportAspRequest(registration);
+      await prepareOrExportAspRequest(registration, signatureBytes);
     }
   };
 
   const prepareOrExportAspRequest = async (
-    registration: AspRegistrationPayload
+    registration: AspRegistrationPayload,
+    signatureBytes: number[],
+    recoveryAttempted = false
   ) => {
     setStatus("Preparing private pool proof");
     try {
@@ -349,12 +362,80 @@ export function PrivateProverConsole() {
       if (!isAspRegistrationRequired(message)) {
         throw caught;
       }
+      const registered = await findAspMembershipLeafEvent({
+        rpcUrl: config.stellarRpcUrl,
+        contractId: config.aspMembershipContractId,
+        startLedger: config.privatePaymentsDeploymentLedger,
+        leaf: registration.membershipLeaf,
+      });
+      if (registered && !recoveryAttempted) {
+        setStatus("ASP leaf is on-chain; refreshing local prover sync");
+        await resetPrivateProverRuntimeStorage();
+        await reloadRuntime();
+        await deriveKeysFromSignatureBytes(signatureBytes);
+        await prepareOrExportAspRequest(registration, signatureBytes, true);
+        return;
+      }
+      if (registered) {
+        throw new Error(
+          `ASP membership leaf is registered on-chain at ledger ${registered.ledger}, but the browser private-pool tree still did not ingest it after a storage reset. Refresh the page and retry once Vercel has served the latest assets.`
+        );
+      }
       downloadJson(ASP_REQUEST_JSON, registration);
       setError(
         "ASP membership registration is required before this wallet can prepare a pool proof. The membership request JSON was exported."
       );
       setStatus("ASP membership request exported");
     }
+  };
+
+  const resetPrivateProverRuntimeStorage = async () => {
+    setStatus("Resetting stale private prover browser storage");
+    const frame = iframeRef.current;
+    if (frame) {
+      await new Promise<void>((resolve) => {
+        const timeout = window.setTimeout(resolve, 2_000);
+        frame.addEventListener(
+          "load",
+          () => {
+            window.clearTimeout(timeout);
+            resolve();
+          },
+          { once: true }
+        );
+        frame.src = "about:blank";
+      });
+    }
+    window.localStorage.removeItem("nebula.privateProver.latest");
+    await clearOriginPrivateFileSystem();
+  };
+
+  const reloadRuntime = async () => {
+    const frame = iframeRef.current;
+    if (!frame) {
+      throw new Error("Private prover runtime frame is unavailable");
+    }
+
+    setRuntimeReady(false);
+    setInitialized(false);
+    setPatchedPrepareOnly(false);
+    setProgress([]);
+
+    const reloadUrl = new URL(config.runtimeUrl, window.location.href);
+    reloadUrl.searchParams.set("nebulaReload", Date.now().toString());
+    await new Promise<void>((resolve) => {
+      const timeout = window.setTimeout(resolve, 5_000);
+      frame.addEventListener(
+        "load",
+        () => {
+          window.clearTimeout(timeout);
+          resolve();
+        },
+        { once: true }
+      );
+      frame.src = reloadUrl.toString();
+    });
+    await bootRuntime();
   };
 
   const prepareDepositFromRuntime = async (): Promise<PrivateProverResult> => {
@@ -542,6 +623,34 @@ function isAspRegistrationRequired(message: string): boolean {
     normalized.includes("asp membership registration is required") ||
     normalized.includes("register the asp membership leaf")
   );
+}
+
+type OriginPrivateDirectory = {
+  values: () => AsyncIterable<OriginPrivateEntry>;
+  removeEntry: (
+    name: string,
+    options?: { recursive?: boolean }
+  ) => Promise<void>;
+};
+
+type OriginPrivateEntry = {
+  name: string;
+  kind: "file" | "directory";
+};
+
+type StorageManagerWithDirectory = StorageManager & {
+  getDirectory?: () => Promise<OriginPrivateDirectory>;
+};
+
+async function clearOriginPrivateFileSystem(): Promise<void> {
+  const storage = navigator.storage as StorageManagerWithDirectory;
+  const root = await storage.getDirectory?.();
+  if (!root) {
+    return;
+  }
+  for await (const entry of root.values()) {
+    await root.removeEntry(entry.name, { recursive: entry.kind === "directory" });
+  }
 }
 
 function sleep(ms: number): Promise<void> {

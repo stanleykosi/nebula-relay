@@ -15,6 +15,7 @@
     "@nebula/evm-client": "workspace:*",
     "@nebula/stellar-client": "workspace:*",
     "@stellar/freighter-api": "^6.0.1",
+    "@stellar/stellar-sdk": "^16.0.1",
     "@tanstack/react-query": "^5.101.1",
     "lucide-react": "^1.21.0",
     "next": "^16.2.9",

@@ -32,9 +32,12 @@ artifacts/private/
 artifacts/**/*.secret.json
 fixtures/**/*.secret.json
 .nebula/
+nebula-asp-membership-request.json
+nebula-private-pool-prepared.json
 
 # OS/editor
 .DS_Store
+*:Zone.Identifier
 .vscode/
 .idea/
 

@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "checkedAt": "2026-06-30T23:34:06.187Z",
+  "checkedAt": "2026-07-01T11:28:39.568Z",
   "deploymentPath": "/home/stanley/nebula-relay/deployments/stellar-private-payments-usdc-testnet.json",
   "deploymentNetwork": "testnet",
   "pool": {
@@ -16,7 +16,7 @@
   },
   "onchain": {
     "poolRoot": "\"2302223575749844940221218608817648865122641281382153518325924961250440546344\"",
-    "aspMembershipRoot": "\"2302223575749844940221218608817648865122641281382153518325924961250440546344\"",
+    "aspMembershipRoot": "\"13513994960082187451543450515948533455801785531258806348506385143374416365833\"",
     "aspNonMembershipRoot": "\"0\"",
     "assetSymbol": "\"USDC\"",
     "assetDecimals": "7"
