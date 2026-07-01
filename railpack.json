@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.railpack.com",
   "provider": "node",
+  "buildAptPackages": ["curl"],
   "packages": {
     "node": "22",
     "rust": "1.91.1"

@@ -1,6 +1,6 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "corepack enable && corepack prepare pnpm@9.15.1 --activate && pnpm install --frozen-lockfile && pnpm --filter @nebula/api... build && cargo build -p nebula-host --release"
+buildCommand = "bash scripts/railway_build_api.sh"
 watchPatterns = [
   "/apps/api/**",
   "/packages/**",
@@ -11,6 +11,7 @@ watchPatterns = [
   "/pnpm-lock.yaml",
   "/pnpm-workspace.yaml",
   "/railpack.json",
+  "/scripts/railway_build_api.sh",
   "/contracts/stellar/**"
 ]
 
