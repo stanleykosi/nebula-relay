@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "checkedAt": "2026-06-30T23:34:06.187Z",
+  "deploymentPath": "/home/stanley/nebula-relay/deployments/stellar-private-payments-usdc-testnet.json",
+  "deploymentNetwork": "testnet",
+  "pool": {
+    "poolContractId": "CC4XGYEOY4SLBG4X7YDXGGDJ6C5GLLHPXCNILZYTE5MQGJGJHC75JDES",
+    "tokenContractId": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+    "deploymentLedger": 3369482,
+    "enabled": true,
+    "asset": {
+      "kind": "classic",
+      "code": "USDC",
+      "issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+    }
+  },
+  "onchain": {
+    "poolRoot": "\"2302223575749844940221218608817648865122641281382153518325924961250440546344\"",
+    "aspMembershipRoot": "\"2302223575749844940221218608817648865122641281382153518325924961250440546344\"",
+    "aspNonMembershipRoot": "\"0\"",
+    "assetSymbol": "\"USDC\"",
+    "assetDecimals": "7"
+  }
+}

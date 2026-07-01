@@ -32,7 +32,7 @@ import {
   runInvalidTokenFailure,
   runReplayFailure,
   showNullifierStored,
-  showPrivateNoteHandoff,
+  showPrivatePoolDeposit,
   settleFixtureCctp,
   type DemoState,
 } from "@/lib/demo";
@@ -141,7 +141,7 @@ export function DemoConsole() {
           Verifier: {demoConfig.verifierMode}
         </Badge>
         <Badge tone="info">Network: {demoConfig.stellarNetwork}</Badge>
-        <Badge tone="warn">Mode A handoff</Badge>
+        <Badge tone="ok">Private pool proof</Badge>
       </div>
       <ModeStrip config={demoConfig} />
 
@@ -378,23 +378,23 @@ export function DemoConsole() {
           ) : null}
         </Panel>
 
-        <Panel title="9. Private note / pool handoff" className="span-6">
+        <Panel title="9. Private pool deposit" className="span-6">
           <p>
-            Stage 8 implements Mode A: note registry and adapter handoff. Direct
-            pool credit is planned, not claimed.
+            The private claim uses an upstream Stellar Private Payments deposit
+            proof and stores no visible claimant on NebulaRelay.
           </p>
           <div className="actions">
             <ActionButton
               onClick={() =>
-                setState((current) => showPrivateNoteHandoff(current))
+                setState((current) => showPrivatePoolDeposit(current))
               }
               disabled={!state.nullifierStored}
             >
-              <ShieldCheck size={16} /> Show handoff
+              <ShieldCheck size={16} /> Show pool deposit
             </ActionButton>
           </div>
-          {state.handoffStatus ? (
-            <p className="callout">{state.handoffStatus}</p>
+          {state.privatePoolStatus ? (
+            <p className="callout">{state.privatePoolStatus}</p>
           ) : null}
           <HashRow label="Private note" value={state.noteCommitment} />
         </Panel>
@@ -402,13 +402,13 @@ export function DemoConsole() {
         <Panel title="10. Auditor packet" className="span-12">
           <p>
             User-exported disclosure packet with schema fields, verification
-            steps, proof-mode caveats, testnet settlement details, and Mode A
-            handoff.
+            steps, proof-mode caveats, testnet settlement details, and private
+            pool proof boundaries.
           </p>
           <div className="actions">
             <ActionButton
               onClick={() => setState((current) => exportAuditorPacket(current))}
-              disabled={!state.handoffStatus}
+              disabled={!state.privatePoolStatus}
             >
               <FileJson size={16} /> Prepare packet
             </ActionButton>

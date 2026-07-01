@@ -64,7 +64,7 @@ export const LockWitnessSchema = z.object({
 });
 
 export const NebulaJournalSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   domain: Hex32Schema,
   sourceChainId: z.number().int().positive(),
   sourceBlockNumber: z.number().int().nonnegative(),
@@ -73,6 +73,8 @@ export const NebulaJournalSchema = z.object({
   token: Hex20Schema,
   amount: DecimalStringSchema,
   amountBucket: z.number().int().nonnegative(),
+  settlementAmount: DecimalStringSchema,
+  settlementAmountBucket: z.number().int().nonnegative(),
   stellarNoteCommitment: Hex32Schema,
   complianceRoot: Hex32Schema,
   complianceMode: z.number().int().nonnegative().max(255),
@@ -86,6 +88,7 @@ export const NebulaJournalSchema = z.object({
   cctpMessageHash: Hex32Schema,
   cctpAttestationHash: Hex32Schema,
   cctpMintRecipient: Hex32Schema,
+  cctpFeeExecuted: DecimalStringSchema,
 });
 
 export const ProofArtifactSchema = z.object({

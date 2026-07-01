@@ -14,16 +14,19 @@ Usage: scripts/run_live_testnet_transcript.sh --yes [--skip-package-build]
 
 Runs the full live Ethereum Sepolia -> Stellar testnet Nebula transcript:
 
-  1. Check testnet readiness, balances, allowance, CCTP route, and hook data.
-  2. Submit one Sepolia NebulaCctpEscrow.lockAndBurn transaction.
-  3. Fetch the Sepolia receipt.
-  4. Poll Circle Iris for the CCTP V2 message and attestation.
-  5. Build a LockWitness from the receipt and CCTP message.
-  6. Submit a Boundless remote Groth16 proof request.
-  7. Ensure the Stellar claimant has a USDC trustline.
-  8. Simulate and submit NebulaRelay.claim on Stellar testnet.
-  9. Verify nullifier storage, claim record, claimant balance, and replay failure.
-  10. Write artifacts/live-transcript-summary.json.
+  1. Check testnet readiness, private-pool readiness, CCTP route, and hook data.
+  2. Build or load an upstream Stellar Private Payments PreparedProverTx JSON.
+  3. Convert it to Nebula PrivatePoolDeposit XDR and use its selected output
+     commitment as NEBULA_NOTE_COMMITMENT for the EVM lock.
+  4. Submit one Sepolia NebulaCctpEscrow.lockAndBurn transaction.
+  5. Fetch the Sepolia receipt.
+  6. Poll Circle Iris for the CCTP V2 message and attestation.
+  7. Verify Circle's actual net amount matches the prepared private-pool amount.
+  8. Build a LockWitness from the receipt and CCTP message.
+  9. Submit a Boundless remote Groth16 proof request.
+  10. Simulate and submit NebulaRelay.claim_to_private_pool on Stellar testnet.
+  11. Verify nullifier storage, private claim record, and replay failure.
+  12. Write artifacts/live-transcript-summary.json.
 
 This is a live testnet script. Every successful run burns NEBULA_LOCK_AMOUNT of
 configured Sepolia test USDC and submits a Stellar testnet claim.
@@ -37,6 +40,17 @@ Useful env:
   NEBULA_ENV_FILE                  Env file to load, default .env.local.
   NEBULA_LIVE_ARTIFACT_DIR         Artifact dir, default artifacts.
   NEBULA_RISC0_RECURSION_ZKR_PATH  Optional predownloaded RISC Zero recursion zip.
+  NEBULA_EXPECTED_SETTLEMENT_AMOUNT Expected net CCTP amount after feeExecuted.
+  NEBULA_EXPECTED_CCTP_FEE_EXECUTED Optional; used to derive expected settlement
+                                  as NEBULA_LOCK_AMOUNT - feeExecuted.
+  NEBULA_UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH
+                                  Path where upstream writes PreparedProverTx JSON.
+  NEBULA_PRIVATE_POOL_PREPARE_COMMAND
+                                  Optional command run before the EVM burn; it
+                                  must write NEBULA_UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH.
+  NEBULA_PRIVATE_POOL_NOTE_OUTPUT_INDEX
+                                  Output commitment index to bind into the EVM
+                                  lock event, default 0.
   CCTP_IRIS_MAX_ATTEMPTS           Default 120.
   CCTP_IRIS_POLL_INTERVAL_MS       Default 5000.
 USAGE
@@ -131,7 +145,6 @@ for name in \
   CCTP_STELLAR_FORWARDER_HOOK_DATA \
   NEXT_PUBLIC_EVM_CHAIN_ID \
   NEBULA_LOCK_AMOUNT \
-  NEBULA_NOTE_COMMITMENT \
   NEBULA_COMPLIANCE_HINT \
   NEBULA_COMPLIANCE_ROOT \
   NEBULA_COMPLIANCE_MODE \
@@ -143,13 +156,24 @@ for name in \
   BOUNDLESS_PRIVATE_KEY \
   NEBULA_IMAGE_ID \
   STELLAR_NETWORK \
+  STELLAR_RPC_URL \
   STELLAR_SOURCE \
   STELLAR_ASSET_CONTRACT_ID \
   NEBULA_RELAY_CONTRACT_ID \
-  RISC0_VERIFIER_ROUTER_ID
+  RISC0_VERIFIER_ROUTER_ID \
+  PRIVATE_PAYMENTS_POOL_ID
 do
   require_env "$name"
 done
+
+if [ -z "${STELLAR_SOURCE_SECRET:-}" ]; then
+  STELLAR_SOURCE_SECRET="$(stellar keys secret "$STELLAR_SOURCE" 2>/dev/null || true)"
+  if [ -z "$STELLAR_SOURCE_SECRET" ]; then
+    echo "Blocker: STELLAR_SOURCE_SECRET is not set and stellar keys secret $STELLAR_SOURCE failed." >&2
+    exit 1
+  fi
+  export STELLAR_SOURCE_SECRET
+fi
 
 mkdir -p "$ARTIFACT_DIR"
 
@@ -161,7 +185,9 @@ WITNESS_PATH="$ARTIFACT_DIR/live-lock-witness.json"
 PROOF_PATH="$ARTIFACT_DIR/live-remote-proof.json"
 BOUNDLESS_LOG_PATH="$ARTIFACT_DIR/live-boundless-prove.log"
 CLAIM_ARGS_ENV_PATH="$ARTIFACT_DIR/live-claim-args.env"
-TRUSTLINE_OUTPUT_PATH="$ARTIFACT_DIR/live-stellar-trustline.txt"
+PRIVATE_POOL_DEPOSIT_XDR_PATH="${NEBULA_PRIVATE_POOL_DEPOSIT_XDR_PATH:-$ARTIFACT_DIR/private-pool-deposit.scval.xdr}"
+UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH="${NEBULA_UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH:-$ARTIFACT_DIR/private-pool-prepared.json}"
+PRIVATE_POOL_DEPOSIT_METADATA_PATH="${NEBULA_PRIVATE_POOL_DEPOSIT_METADATA_PATH:-$ARTIFACT_DIR/private-pool-deposit.metadata.json}"
 CLAIM_SIM_OUTPUT_PATH="$ARTIFACT_DIR/live-stellar-claim-simulation.txt"
 CLAIM_OUTPUT_PATH="$ARTIFACT_DIR/live-stellar-claim.txt"
 REPLAY_OUTPUT_PATH="$ARTIFACT_DIR/live-replay-failure.txt"
@@ -184,8 +210,79 @@ else
   echo "Skipping TypeScript package build."
 fi
 
+echo "Checking Stellar Private Payments pool readiness..."
+bash "$ROOT_DIR/scripts/check_private_pool_testnet.sh"
+
+EXPECTED_SETTLEMENT_AMOUNT="$(
+  node <<'NODE'
+const lockAmount = BigInt(process.env.NEBULA_LOCK_AMOUNT);
+const explicit = (process.env.NEBULA_EXPECTED_SETTLEMENT_AMOUNT || "").trim();
+const expectedFee = (process.env.NEBULA_EXPECTED_CCTP_FEE_EXECUTED || "").trim();
+let expected;
+if (explicit) {
+  expected = BigInt(explicit);
+} else if (expectedFee) {
+  const fee = BigInt(expectedFee);
+  if (fee < 0n || fee >= lockAmount) {
+    console.error("Blocker: NEBULA_EXPECTED_CCTP_FEE_EXECUTED must be >= 0 and below NEBULA_LOCK_AMOUNT.");
+    process.exit(1);
+  }
+  expected = lockAmount - fee;
+} else {
+  console.error("Blocker: set NEBULA_EXPECTED_SETTLEMENT_AMOUNT or NEBULA_EXPECTED_CCTP_FEE_EXECUTED before the privacy run.");
+  process.exit(1);
+}
+if (expected <= 0n || expected > lockAmount) {
+  console.error("Blocker: expected settlement amount must be > 0 and <= NEBULA_LOCK_AMOUNT.");
+  process.exit(1);
+}
+process.stdout.write(expected.toString());
+NODE
+)"
+export NEBULA_SETTLEMENT_AMOUNT="$EXPECTED_SETTLEMENT_AMOUNT"
+
+echo "Preparing upstream Stellar Private Payments proof before EVM burn..."
+if [ -n "${NEBULA_PRIVATE_POOL_PREPARE_COMMAND:-}" ]; then
+  rm -f "$UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH" "$PRIVATE_POOL_DEPOSIT_XDR_PATH" "$PRIVATE_POOL_DEPOSIT_METADATA_PATH"
+  NEBULA_SETTLEMENT_AMOUNT="$EXPECTED_SETTLEMENT_AMOUNT" \
+    PRIVATE_PAYMENTS_POOL_ID="$PRIVATE_PAYMENTS_POOL_ID" \
+    NEBULA_PRIVATE_POOL_DEPOSIT_XDR_PATH="$PRIVATE_POOL_DEPOSIT_XDR_PATH" \
+    NEBULA_PRIVATE_POOL_DEPOSIT_METADATA_PATH="$PRIVATE_POOL_DEPOSIT_METADATA_PATH" \
+    NEBULA_UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH="$UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH" \
+    bash -lc "$NEBULA_PRIVATE_POOL_PREPARE_COMMAND"
+fi
+if [ ! -f "$UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH" ]; then
+  echo "Blocker: upstream PreparedProverTx JSON is required before the EVM burn." >&2
+  echo "Set NEBULA_PRIVATE_POOL_PREPARE_COMMAND or write $UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH." >&2
+  exit 1
+fi
+node scripts/private_pool_deposit_from_upstream.mjs \
+  --input "$UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH" \
+  --out "$PRIVATE_POOL_DEPOSIT_XDR_PATH" \
+  --metadata-out "$PRIVATE_POOL_DEPOSIT_METADATA_PATH" \
+  --expected-pool "$PRIVATE_PAYMENTS_POOL_ID" \
+  --expected-settlement "$EXPECTED_SETTLEMENT_AMOUNT" \
+  --note-output-index "${NEBULA_PRIVATE_POOL_NOTE_OUTPUT_INDEX:-0}"
+NEBULA_NOTE_COMMITMENT="$(
+  node - "$PRIVATE_POOL_DEPOSIT_METADATA_PATH" <<'NODE'
+const fs = require("fs");
+const metadata = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+process.stdout.write(metadata.selectedNoteCommitment);
+NODE
+)"
+export NEBULA_NOTE_COMMITMENT
+
+cat <<EOF
+Private pool proof prepared:
+  expected_settlement_amount=$EXPECTED_SETTLEMENT_AMOUNT
+  note_output_index=${NEBULA_PRIVATE_POOL_NOTE_OUTPUT_INDEX:-0}
+  nebula_note_commitment=$NEBULA_NOTE_COMMITMENT
+  upstream_prepared=$UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH
+  private_deposit_xdr=$PRIVATE_POOL_DEPOSIT_XDR_PATH
+EOF
+
 echo "Validating Stellar Forwarder hook data..."
-node --input-type=module - "$CCTP_STELLAR_FORWARDER_HOOK_DATA" "${STELLAR_FORWARD_RECIPIENT:-}" <<'NODE'
+node --input-type=module - "$CCTP_STELLAR_FORWARDER_HOOK_DATA" "$NEBULA_RELAY_CONTRACT_ID" <<'NODE'
 import { parseStellarForwarderHookData } from "./packages/cctp-client/dist/index.js";
 
 const [hookHex, expectedRecipient] = process.argv.slice(2);
@@ -194,8 +291,8 @@ if (parsed.version !== 0) {
   console.error(`Blocker: CCTP hook version must be 0, got ${parsed.version}.`);
   process.exit(1);
 }
-if (expectedRecipient && parsed.recipient !== expectedRecipient) {
-  console.error(`Blocker: CCTP hook recipient ${parsed.recipient} does not match ${expectedRecipient}.`);
+if (parsed.recipient !== expectedRecipient) {
+  console.error(`Blocker: CCTP hook recipient ${parsed.recipient} must be NebulaRelay ${expectedRecipient}.`);
   process.exit(1);
 }
 console.log(JSON.stringify({ hookVersion: parsed.version, hookRecipient: parsed.recipient }));
@@ -252,7 +349,9 @@ Preflight ok:
 EOF
 
 echo "Submitting Sepolia lockAndBurn..."
-bash "$ROOT_DIR/scripts/run_evm_cctp_lock_testnet.sh"
+NEBULA_ENV_FILE=/dev/null \
+  NEBULA_NOTE_COMMITMENT="$NEBULA_NOTE_COMMITMENT" \
+  bash "$ROOT_DIR/scripts/run_evm_cctp_lock_testnet.sh"
 TX_HASH="$(
   node -e "const fs=require('fs'); const j=JSON.parse(fs.readFileSync('$ROOT_DIR/contracts/evm/broadcast/LockAndBurnCctp.s.sol/11155111/run-latest.json','utf8')); console.log(j.transactions[0].hash)"
 )"
@@ -347,6 +446,20 @@ for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 
 throw new Error(`Circle Iris attestation was not complete after ${maxAttempts} attempts.`);
 NODE
+
+ACTUAL_SETTLEMENT_AMOUNT="$(
+  node - "$SETTLEMENT_PATH" <<'NODE'
+const fs = require("fs");
+const settlement = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+process.stdout.write(String(settlement.parsed?.netAmount ?? ""));
+NODE
+)"
+if [ "$ACTUAL_SETTLEMENT_AMOUNT" != "$EXPECTED_SETTLEMENT_AMOUNT" ]; then
+  echo "Blocker: Circle net amount $ACTUAL_SETTLEMENT_AMOUNT does not match prepared private-pool amount $EXPECTED_SETTLEMENT_AMOUNT." >&2
+  echo "The EVM burn has completed, but Nebula will not submit a mismatched private claim." >&2
+  echo "Prepare a new upstream proof for the actual net amount and rerun the claim step manually after review." >&2
+  exit 1
+fi
 
 echo "Building LockWitness..."
 node --input-type=module - "$RECEIPT_PATH" "$SETTLEMENT_PATH" "$WITNESS_PATH" <<'NODE'
@@ -468,8 +581,10 @@ const pairs = {
   JOURNAL: strip(proof.journalHex),
   CCTP_MESSAGE: strip(settlement.message),
   CCTP_ATTESTATION: strip(settlement.attestation),
-  POOL_PAYLOAD: "00",
   NULLIFIER: strip(proof.publicOutputs.claimNullifier),
+  NOTE_COMMITMENT: strip(proof.publicOutputs.stellarNoteCommitment),
+  SETTLEMENT_AMOUNT: proof.publicOutputs.settlementAmount,
+  SETTLEMENT_AMOUNT_BUCKET: String(proof.publicOutputs.settlementAmountBucket),
 };
 fs.writeFileSync(
   outPath,
@@ -482,82 +597,75 @@ set -a
 . "$CLAIM_ARGS_ENV_PATH"
 set +a
 
-SOURCE_ADDRESS="$(stellar keys address "$STELLAR_SOURCE")"
-CLAIMANT="${STELLAR_CLAIMANT:-$SOURCE_ADDRESS}"
-if [ "$CLAIMANT" != "$SOURCE_ADDRESS" ]; then
-  echo "Blocker: STELLAR_CLAIMANT must match STELLAR_SOURCE for this CLI transcript." >&2
-  echo "Claimant auth is required by NebulaRelay.claim; use a source identity for the claimant wallet." >&2
+if [ "$(normalize_hex "$NEBULA_NOTE_COMMITMENT")" != "$(normalize_hex "$NOTE_COMMITMENT")" ]; then
+  echo "Blocker: RISC Zero journal note 0x$NOTE_COMMITMENT does not match prepared private-pool note $NEBULA_NOTE_COMMITMENT." >&2
   exit 1
 fi
-echo "Ensuring Stellar claimant trustline..."
-stellar contract invoke \
-  --id "$STELLAR_ASSET_CONTRACT_ID" \
-  --source "$STELLAR_SOURCE" \
-  --network "$STELLAR_NETWORK" \
-  --send=default \
-  --auto-sign \
-  -- \
-  trust \
-  --addr "$CLAIMANT" 2>&1 | tee "$TRUSTLINE_OUTPUT_PATH"
+if [ "$SETTLEMENT_AMOUNT" != "$EXPECTED_SETTLEMENT_AMOUNT" ]; then
+  echo "Blocker: proof settlement amount $SETTLEMENT_AMOUNT does not match prepared private-pool amount $EXPECTED_SETTLEMENT_AMOUNT." >&2
+  exit 1
+fi
 
-echo "Simulating Stellar claim..."
-stellar contract invoke \
-  --id "$NEBULA_RELAY_CONTRACT_ID" \
-  --source "$STELLAR_SOURCE" \
-  --network "$STELLAR_NETWORK" \
-  --send=no \
-  -- \
-  claim \
-  --claimant "$CLAIMANT" \
-  --seal "$SEAL" \
-  --image_id "$IMAGE_ID" \
-  --journal "$JOURNAL" \
-  --cctp_message "$CCTP_MESSAGE" \
-  --cctp_attestation "$CCTP_ATTESTATION" \
-  --pool_payload "$POOL_PAYLOAD" 2>&1 | tee "$CLAIM_SIM_OUTPUT_PATH"
+echo "Re-validating prepared private-pool deposit against proof journal..."
+node scripts/private_pool_deposit_from_upstream.mjs \
+  --input "$UPSTREAM_PRIVATE_POOL_PROOF_JSON_PATH" \
+  --out "$PRIVATE_POOL_DEPOSIT_XDR_PATH" \
+  --metadata-out "$PRIVATE_POOL_DEPOSIT_METADATA_PATH" \
+  --expected-pool "$PRIVATE_PAYMENTS_POOL_ID" \
+  --expected-settlement "$SETTLEMENT_AMOUNT" \
+  --expected-note "0x$NOTE_COMMITMENT" \
+  --note-output-index "${NEBULA_PRIVATE_POOL_NOTE_OUTPUT_INDEX:-0}"
+PRIVATE_POOL_DEPOSIT_XDR="$(tr -d '\r\n ' < "$PRIVATE_POOL_DEPOSIT_XDR_PATH")"
 
-echo "Submitting Stellar claim..."
-stellar contract invoke \
-  --id "$NEBULA_RELAY_CONTRACT_ID" \
-  --source "$STELLAR_SOURCE" \
-  --network "$STELLAR_NETWORK" \
-  --send=yes \
-  --auto-sign \
-  -- \
-  claim \
-  --claimant "$CLAIMANT" \
-  --seal "$SEAL" \
-  --image_id "$IMAGE_ID" \
-  --journal "$JOURNAL" \
-  --cctp_message "$CCTP_MESSAGE" \
-  --cctp_attestation "$CCTP_ATTESTATION" \
-  --pool_payload "$POOL_PAYLOAD" 2>&1 | tee "$CLAIM_OUTPUT_PATH"
-
+echo "Simulating and submitting Stellar private-pool claim..."
 CLAIM_TX_HASH="$(
-  node - "$CLAIM_OUTPUT_PATH" <<'NODE'
-const fs = require("fs");
-const text = fs.readFileSync(process.argv[2], "utf8");
-const match = /Signing transaction:\s*([0-9a-fA-F]{64})/.exec(text)
-  ?? /\/tx\/([0-9a-fA-F]{64})/.exec(text);
-if (!match) {
-  console.error("Blocker: could not parse Stellar claim transaction hash.");
-  process.exit(1);
-}
-process.stdout.write(match[1]);
+  PRIVATE_POOL_DEPOSIT_XDR="$PRIVATE_POOL_DEPOSIT_XDR" \
+    node --input-type=module - "$CLAIM_SIM_OUTPUT_PATH" "$CLAIM_OUTPUT_PATH" <<'NODE'
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import {
+  buildPrivatePoolClaimTransaction,
+  simulateAndAssembleTransaction,
+  submitSignedTransaction,
+} from "./packages/stellar-client/dist/index.js";
+
+const requireFromStellarClient = createRequire(new URL("./packages/stellar-client/package.json", import.meta.url));
+const StellarSdk = await import(requireFromStellarClient.resolve("@stellar/stellar-sdk"));
+const [simPath, outPath] = process.argv.slice(2);
+const rpc = new StellarSdk.rpc.Server(process.env.STELLAR_RPC_URL);
+const sourceKeypair = StellarSdk.Keypair.fromSecret(process.env.STELLAR_SOURCE_SECRET);
+const sourceAccount = await rpc.getAccount(sourceKeypair.publicKey());
+const privateDeposit = StellarSdk.xdr.ScVal.fromXDR(process.env.PRIVATE_POOL_DEPOSIT_XDR, "base64");
+const hex = (value) => `0x${String(value).replace(/^0x/i, "")}`;
+const networkPassphrase = process.env.STELLAR_NETWORK_PASSPHRASE || StellarSdk.Networks.TESTNET;
+const tx = buildPrivatePoolClaimTransaction({
+  sourceAccount,
+  contractId: process.env.NEBULA_RELAY_CONTRACT_ID,
+  networkPassphrase,
+  claim: {
+    seal: hex(process.env.SEAL),
+    imageId: hex(process.env.IMAGE_ID),
+    journal: hex(process.env.JOURNAL),
+    cctpMessage: hex(process.env.CCTP_MESSAGE),
+    cctpAttestation: hex(process.env.CCTP_ATTESTATION),
+    privateDeposit,
+  },
+});
+const prepared = await simulateAndAssembleTransaction(rpc, tx);
+fs.writeFileSync(simPath, JSON.stringify({ ok: true }, null, 2));
+prepared.transaction.sign(sourceKeypair);
+const result = await submitSignedTransaction(
+  rpc,
+  prepared.transaction.toXDR(),
+  networkPassphrase,
+  { pollIntervalMs: 1000, maxPolls: 60 },
+);
+fs.writeFileSync(outPath, JSON.stringify(result, null, 2));
+process.stdout.write(result.hash);
 NODE
 )"
 
-echo "Verifying claim storage and balance..."
-CLAIMANT_BALANCE_RAW="$(
-  stellar contract invoke \
-    --id "$STELLAR_ASSET_CONTRACT_ID" \
-    --source "$STELLAR_SOURCE" \
-    --network "$STELLAR_NETWORK" \
-    --send=no \
-    -- \
-    balance \
-    --id "$CLAIMANT" | tr -d '"'
-)"
+echo "Verifying private claim storage..."
 CLAIMED_RESULT="$(
   stellar contract invoke \
     --id "$NEBULA_RELAY_CONTRACT_ID" \
@@ -578,44 +686,60 @@ stellar contract invoke \
   --network "$STELLAR_NETWORK" \
   --send=no \
   -- \
-  get_claim \
+  get_private_claim \
   --nullifier "$NULLIFIER" > "$CLAIM_RECORD_PATH"
 
 echo "Checking replay rejection..."
-set +e
-REPLAY_OUTPUT="$(
-  stellar contract invoke \
-    --id "$NEBULA_RELAY_CONTRACT_ID" \
-    --source "$STELLAR_SOURCE" \
-    --network "$STELLAR_NETWORK" \
-    --send=no \
-    -- \
-    claim \
-    --claimant "$CLAIMANT" \
-    --seal "$SEAL" \
-    --image_id "$IMAGE_ID" \
-    --journal "$JOURNAL" \
-    --cctp_message "$CCTP_MESSAGE" \
-    --cctp_attestation "$CCTP_ATTESTATION" \
-    --pool_payload "$POOL_PAYLOAD" 2>&1
-)"
-REPLAY_STATUS=$?
-set -e
-printf "%s\n" "$REPLAY_OUTPUT" > "$REPLAY_OUTPUT_PATH"
-if [ "$REPLAY_STATUS" -eq 0 ]; then
-  echo "Blocker: replay unexpectedly succeeded." >&2
-  exit 1
-fi
-if ! printf "%s\n" "$REPLAY_OUTPUT" | grep -q "Contract, #15"; then
-  echo "Blocker: replay failed, but not with NullifierAlreadyClaimed (#15)." >&2
-  exit 1
-fi
+PRIVATE_POOL_DEPOSIT_XDR="$PRIVATE_POOL_DEPOSIT_XDR" \
+  node --input-type=module - "$REPLAY_OUTPUT_PATH" <<'NODE'
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import {
+  buildPrivatePoolClaimTransaction,
+  simulateAndAssembleTransaction,
+} from "./packages/stellar-client/dist/index.js";
+
+const requireFromStellarClient = createRequire(new URL("./packages/stellar-client/package.json", import.meta.url));
+const StellarSdk = await import(requireFromStellarClient.resolve("@stellar/stellar-sdk"));
+const [outPath] = process.argv.slice(2);
+const rpc = new StellarSdk.rpc.Server(process.env.STELLAR_RPC_URL);
+const sourceKeypair = StellarSdk.Keypair.fromSecret(process.env.STELLAR_SOURCE_SECRET);
+const sourceAccount = await rpc.getAccount(sourceKeypair.publicKey());
+const privateDeposit = StellarSdk.xdr.ScVal.fromXDR(process.env.PRIVATE_POOL_DEPOSIT_XDR, "base64");
+const hex = (value) => `0x${String(value).replace(/^0x/i, "")}`;
+const networkPassphrase = process.env.STELLAR_NETWORK_PASSPHRASE || StellarSdk.Networks.TESTNET;
+const tx = buildPrivatePoolClaimTransaction({
+  sourceAccount,
+  contractId: process.env.NEBULA_RELAY_CONTRACT_ID,
+  networkPassphrase,
+  claim: {
+    seal: hex(process.env.SEAL),
+    imageId: hex(process.env.IMAGE_ID),
+    journal: hex(process.env.JOURNAL),
+    cctpMessage: hex(process.env.CCTP_MESSAGE),
+    cctpAttestation: hex(process.env.CCTP_ATTESTATION),
+    privateDeposit,
+  },
+});
+try {
+  await simulateAndAssembleTransaction(rpc, tx);
+  fs.writeFileSync(outPath, "replay unexpectedly simulated successfully\n");
+  process.exit(1);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  fs.writeFileSync(outPath, `${message}\n`);
+  if (!message.includes("#15") && !message.includes("NullifierAlreadyClaimed")) {
+    console.error(`Blocker: replay failed, but not with NullifierAlreadyClaimed (#15): ${message}`);
+    process.exit(1);
+  }
+}
+NODE
 
 echo "Writing live transcript summary..."
 BOUNDLESS_REQUEST_ID="$BOUNDLESS_REQUEST_ID" \
   CLAIM_TX_HASH="$CLAIM_TX_HASH" \
-  CLAIMANT="$CLAIMANT" \
-  CLAIMANT_BALANCE_RAW="$CLAIMANT_BALANCE_RAW" \
+  PRIVATE_PAYMENTS_POOL_ID="$PRIVATE_PAYMENTS_POOL_ID" \
+  PRIVATE_POOL_DEPOSIT_METADATA_PATH="$PRIVATE_POOL_DEPOSIT_METADATA_PATH" \
   node - "$RECEIPT_PATH" "$WITNESS_PATH" "$SETTLEMENT_PATH" "$PROOF_PATH" "$SUMMARY_PATH" <<'NODE'
 const fs = require("fs");
 const [receiptPath, witnessPath, settlementPath, proofPath, summaryPath] = process.argv.slice(2);
@@ -623,6 +747,10 @@ const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
 const witness = JSON.parse(fs.readFileSync(witnessPath, "utf8"));
 const settlement = JSON.parse(fs.readFileSync(settlementPath, "utf8"));
 const proof = JSON.parse(fs.readFileSync(proofPath, "utf8"));
+const privatePoolMetadataPath = process.env.PRIVATE_POOL_DEPOSIT_METADATA_PATH;
+const privatePoolMetadata = privatePoolMetadataPath && fs.existsSync(privatePoolMetadataPath)
+  ? JSON.parse(fs.readFileSync(privatePoolMetadataPath, "utf8"))
+  : null;
 const blockNumber = typeof receipt.blockNumber === "string" && receipt.blockNumber.startsWith("0x")
   ? Number.parseInt(receipt.blockNumber, 16)
   : Number(receipt.blockNumber);
@@ -661,10 +789,15 @@ const summary = {
   stellar: {
     network: "stellar-testnet",
     claimTxHash: process.env.CLAIM_TX_HASH,
-    claimant: process.env.CLAIMANT,
+    visibleClaimant: null,
+    privatePool: process.env.PRIVATE_PAYMENTS_POOL_ID,
+    privatePoolPreparedTxPath: privatePoolMetadata?.upstreamPreparedTxPath ?? null,
+    privatePoolNoteOutputIndex: privatePoolMetadata?.selectedOutputIndex ?? null,
+    privatePoolOutputCommitments: privatePoolMetadata?.outputCommitments ?? null,
     claimNullifier: proof.publicOutputs.claimNullifier,
     noteCommitment: proof.publicOutputs.stellarNoteCommitment,
-    claimantUsdcBalanceRawAfterClaim: process.env.CLAIMANT_BALANCE_RAW,
+    settlementAmountRaw: proof.publicOutputs.settlementAmount,
+    settlementAmountBucket: proof.publicOutputs.settlementAmountBucket,
     relay: process.env.NEBULA_RELAY_CONTRACT_ID,
     verifierRouter: process.env.RISC0_VERIFIER_ROUTER_ID,
     asset: process.env.STELLAR_ASSET_CONTRACT_ID,

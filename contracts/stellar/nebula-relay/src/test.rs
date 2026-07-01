@@ -1,7 +1,9 @@
 extern crate std;
 
 use super::cctp_forwarder::CctpForwarderError;
-use super::pool_adapter::PoolAdapterError;
+use super::private_pool::{
+    Groth16Proof, PrivatePoolDeposit, PrivatePoolError, PrivatePoolExtData, PrivatePoolProof,
+};
 use super::verifier_router::VerifierError;
 use super::*;
 use nebula_risc0_shared::{
@@ -9,8 +11,9 @@ use nebula_risc0_shared::{
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype,
+    crypto::bn254::{Bn254G1Affine, Bn254G2Affine},
     testutils::{Address as _, Ledger as _},
-    Address, Bytes, Env,
+    Address, Bytes, Env, Vec, I256, U256,
 };
 use std::{borrow::ToOwned, format, string::String};
 
@@ -31,28 +34,6 @@ enum RouterHarnessKey {
 
 #[contracttype]
 #[derive(Clone)]
-enum PoolHarnessKey {
-    ExpectedRelay,
-    ExpectedClaimant,
-    ExpectedNote,
-    ExpectedAmount,
-    ExpectedAsset,
-    ExpectedNullifier,
-    ExpectedEvent,
-    ShouldFail,
-    Called,
-    LastRelay,
-    LastClaimant,
-    LastNote,
-    LastAmount,
-    LastAsset,
-    LastNullifier,
-    LastEvent,
-    LastPayload,
-}
-
-#[contracttype]
-#[derive(Clone)]
 enum CctpHarnessKey {
     ExpectedMessage,
     ExpectedAttestation,
@@ -60,6 +41,23 @@ enum CctpHarnessKey {
     Called,
     LastMessage,
     LastAttestation,
+}
+
+#[contracttype]
+#[derive(Clone)]
+enum PrivatePoolHarnessKey {
+    ExpectedSender,
+    ExpectedRecipient,
+    ExpectedAmount,
+    ExpectedPublicAmount,
+    ShouldFail,
+    Called,
+    LastSender,
+    LastRecipient,
+    LastExtAmount,
+    LastPublicAmount,
+    LastOutputCommitment0,
+    LastOutputCommitment1,
 }
 
 #[contract]
@@ -152,176 +150,6 @@ impl RouterHarness {
 }
 
 #[contract]
-struct PoolAdapterHarness;
-
-#[contractimpl]
-impl PoolAdapterHarness {
-    pub fn configure(
-        env: Env,
-        expected_relay: Address,
-        expected_claimant: Address,
-        expected_note: BytesN<32>,
-        expected_amount: i128,
-        expected_asset: Address,
-        expected_nullifier: BytesN<32>,
-        expected_event: BytesN<32>,
-        should_fail: bool,
-    ) {
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::ExpectedRelay, &expected_relay);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::ExpectedClaimant, &expected_claimant);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::ExpectedNote, &expected_note);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::ExpectedAmount, &expected_amount);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::ExpectedAsset, &expected_asset);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::ExpectedNullifier, &expected_nullifier);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::ExpectedEvent, &expected_event);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::ShouldFail, &should_fail);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::Called, &false);
-    }
-
-    pub fn credit_note_from_relay(
-        env: Env,
-        relay: Address,
-        claimant: Address,
-        note_commitment: BytesN<32>,
-        amount: i128,
-        asset: Address,
-        nullifier: BytesN<32>,
-        event_commitment: BytesN<32>,
-        pool_payload: Bytes,
-    ) -> Result<(), PoolAdapterError> {
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::Called, &true);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::LastRelay, &relay);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::LastClaimant, &claimant);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::LastNote, &note_commitment);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::LastAmount, &amount);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::LastAsset, &asset);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::LastNullifier, &nullifier);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::LastEvent, &event_commitment);
-        env.storage()
-            .temporary()
-            .set(&PoolHarnessKey::LastPayload, &pool_payload);
-
-        if env
-            .storage()
-            .temporary()
-            .get(&PoolHarnessKey::ShouldFail)
-            .unwrap_or(false)
-        {
-            return Err(PoolAdapterError::Rejected);
-        }
-
-        let expected_relay: Address = env
-            .storage()
-            .temporary()
-            .get(&PoolHarnessKey::ExpectedRelay)
-            .ok_or(PoolAdapterError::InvalidHandoff)?;
-        if relay != expected_relay {
-            return Err(PoolAdapterError::NotRelay);
-        }
-
-        let expected_claimant: Address = env
-            .storage()
-            .temporary()
-            .get(&PoolHarnessKey::ExpectedClaimant)
-            .ok_or(PoolAdapterError::InvalidHandoff)?;
-        let expected_note: BytesN<32> = env
-            .storage()
-            .temporary()
-            .get(&PoolHarnessKey::ExpectedNote)
-            .ok_or(PoolAdapterError::InvalidHandoff)?;
-        let expected_amount: i128 = env
-            .storage()
-            .temporary()
-            .get(&PoolHarnessKey::ExpectedAmount)
-            .ok_or(PoolAdapterError::InvalidHandoff)?;
-        let expected_asset: Address = env
-            .storage()
-            .temporary()
-            .get(&PoolHarnessKey::ExpectedAsset)
-            .ok_or(PoolAdapterError::InvalidHandoff)?;
-        let expected_nullifier: BytesN<32> = env
-            .storage()
-            .temporary()
-            .get(&PoolHarnessKey::ExpectedNullifier)
-            .ok_or(PoolAdapterError::InvalidHandoff)?;
-        let expected_event: BytesN<32> = env
-            .storage()
-            .temporary()
-            .get(&PoolHarnessKey::ExpectedEvent)
-            .ok_or(PoolAdapterError::InvalidHandoff)?;
-
-        if claimant != expected_claimant
-            || note_commitment != expected_note
-            || amount != expected_amount
-            || asset != expected_asset
-            || nullifier != expected_nullifier
-            || event_commitment != expected_event
-        {
-            return Err(PoolAdapterError::InvalidHandoff);
-        }
-
-        Ok(())
-    }
-
-    pub fn was_called(env: Env) -> bool {
-        env.storage()
-            .temporary()
-            .get(&PoolHarnessKey::Called)
-            .unwrap_or(false)
-    }
-
-    pub fn last_note(env: Env) -> Option<BytesN<32>> {
-        env.storage().temporary().get(&PoolHarnessKey::LastNote)
-    }
-
-    pub fn last_amount(env: Env) -> Option<i128> {
-        env.storage().temporary().get(&PoolHarnessKey::LastAmount)
-    }
-
-    pub fn last_asset(env: Env) -> Option<Address> {
-        env.storage().temporary().get(&PoolHarnessKey::LastAsset)
-    }
-
-    pub fn last_payload(env: Env) -> Option<Bytes> {
-        env.storage().temporary().get(&PoolHarnessKey::LastPayload)
-    }
-}
-
-#[contract]
 struct CctpForwarderHarness;
 
 #[contractimpl]
@@ -398,6 +226,139 @@ impl CctpForwarderHarness {
     }
 }
 
+#[contract]
+struct PrivatePoolHarness;
+
+#[contractimpl]
+impl PrivatePoolHarness {
+    pub fn configure(
+        env: Env,
+        expected_sender: Address,
+        expected_recipient: Address,
+        expected_amount: i128,
+        expected_public_amount: U256,
+        should_fail: bool,
+    ) {
+        env.storage()
+            .temporary()
+            .set(&PrivatePoolHarnessKey::ExpectedSender, &expected_sender);
+        env.storage().temporary().set(
+            &PrivatePoolHarnessKey::ExpectedRecipient,
+            &expected_recipient,
+        );
+        env.storage()
+            .temporary()
+            .set(&PrivatePoolHarnessKey::ExpectedAmount, &expected_amount);
+        env.storage().temporary().set(
+            &PrivatePoolHarnessKey::ExpectedPublicAmount,
+            &expected_public_amount,
+        );
+        env.storage()
+            .temporary()
+            .set(&PrivatePoolHarnessKey::ShouldFail, &should_fail);
+        env.storage()
+            .temporary()
+            .set(&PrivatePoolHarnessKey::Called, &false);
+    }
+
+    pub fn transact(
+        env: Env,
+        proof: PrivatePoolProof,
+        ext_data: PrivatePoolExtData,
+        sender: Address,
+    ) -> Result<(), PrivatePoolError> {
+        env.storage()
+            .temporary()
+            .set(&PrivatePoolHarnessKey::Called, &true);
+        env.storage()
+            .temporary()
+            .set(&PrivatePoolHarnessKey::LastSender, &sender);
+        env.storage()
+            .temporary()
+            .set(&PrivatePoolHarnessKey::LastRecipient, &ext_data.recipient);
+        env.storage()
+            .temporary()
+            .set(&PrivatePoolHarnessKey::LastExtAmount, &ext_data.ext_amount);
+        env.storage().temporary().set(
+            &PrivatePoolHarnessKey::LastPublicAmount,
+            &proof.public_amount,
+        );
+        env.storage().temporary().set(
+            &PrivatePoolHarnessKey::LastOutputCommitment0,
+            &proof.output_commitment0,
+        );
+        env.storage().temporary().set(
+            &PrivatePoolHarnessKey::LastOutputCommitment1,
+            &proof.output_commitment1,
+        );
+
+        if env
+            .storage()
+            .temporary()
+            .get(&PrivatePoolHarnessKey::ShouldFail)
+            .unwrap_or(false)
+        {
+            return Err(PrivatePoolError::InvalidProof);
+        }
+
+        let expected_sender: Address = env
+            .storage()
+            .temporary()
+            .get(&PrivatePoolHarnessKey::ExpectedSender)
+            .ok_or(PrivatePoolError::NotAuthorized)?;
+        let expected_recipient: Address = env
+            .storage()
+            .temporary()
+            .get(&PrivatePoolHarnessKey::ExpectedRecipient)
+            .ok_or(PrivatePoolError::NotAuthorized)?;
+        let expected_amount: i128 = env
+            .storage()
+            .temporary()
+            .get(&PrivatePoolHarnessKey::ExpectedAmount)
+            .ok_or(PrivatePoolError::WrongExtAmount)?;
+        let expected_public_amount: U256 = env
+            .storage()
+            .temporary()
+            .get(&PrivatePoolHarnessKey::ExpectedPublicAmount)
+            .ok_or(PrivatePoolError::WrongExtAmount)?;
+
+        if sender != expected_sender
+            || ext_data.recipient != expected_recipient
+            || ext_data.ext_amount.to_i128() != Some(expected_amount)
+            || proof.public_amount != expected_public_amount
+        {
+            return Err(PrivatePoolError::WrongExtAmount);
+        }
+
+        Ok(())
+    }
+
+    pub fn was_called(env: Env) -> bool {
+        env.storage()
+            .temporary()
+            .get(&PrivatePoolHarnessKey::Called)
+            .unwrap_or(false)
+    }
+
+    pub fn last_sender(env: Env) -> Option<Address> {
+        env.storage()
+            .temporary()
+            .get(&PrivatePoolHarnessKey::LastSender)
+    }
+
+    pub fn last_recipient(env: Env) -> Option<Address> {
+        env.storage()
+            .temporary()
+            .get(&PrivatePoolHarnessKey::LastRecipient)
+    }
+
+    pub fn last_ext_amount(env: Env) -> Option<I256> {
+        env.storage()
+            .temporary()
+            .get(&PrivatePoolHarnessKey::LastExtAmount)
+    }
+}
+
 fn hex20(env: &Env, value: &str) -> BytesN<20> {
     let raw = value.trim_start_matches("0x");
     let bytes = hex::decode(raw).unwrap();
@@ -432,11 +393,9 @@ struct Setup {
     env: Env,
     contract_id: Address,
     verifier_router: Address,
-    pool_adapter: Address,
+    private_pool: Address,
     cctp_forwarder: Address,
-    asset: Address,
     admin: Address,
-    claimant: Address,
 }
 
 impl Setup {
@@ -448,8 +407,8 @@ impl Setup {
         RouterHarnessClient::new(&self.env, &self.verifier_router)
     }
 
-    fn adapter(&self) -> PoolAdapterHarnessClient<'_> {
-        PoolAdapterHarnessClient::new(&self.env, &self.pool_adapter)
+    fn private_pool(&self) -> PrivatePoolHarnessClient<'_> {
+        PrivatePoolHarnessClient::new(&self.env, &self.private_pool)
     }
 
     fn cctp(&self) -> CctpForwarderHarnessClient<'_> {
@@ -480,16 +439,13 @@ impl Setup {
             .configure(seal, image_id, expected_journal_digest, &should_fail);
     }
 
-    fn configure_adapter_from_journal(&self, journal: &NebulaJournal, should_fail: bool) {
-        let fields = handoff_fields(&self.env, journal);
-        self.adapter().configure(
+    fn configure_private_pool_from_journal(&self, journal: &NebulaJournal, should_fail: bool) {
+        let amount = journal.settlement_amount.parse::<i128>().unwrap();
+        self.private_pool().configure(
             &self.contract_id,
-            &self.claimant,
-            &fields.note_commitment,
-            &fields.amount,
-            &self.asset,
-            &fields.nullifier,
-            &fields.event_commitment,
+            &self.private_pool,
+            &amount,
+            &u256_from_i128_test(&self.env, amount),
             &should_fail,
         );
     }
@@ -503,19 +459,42 @@ impl Setup {
     }
 }
 
-struct HandoffFields {
-    note_commitment: BytesN<32>,
-    amount: i128,
-    nullifier: BytesN<32>,
-    event_commitment: BytesN<32>,
+fn u256_from_i128_test(env: &Env, amount: i128) -> U256 {
+    U256::from_be_bytes(env, &I256::from_i128(env, amount).to_be_bytes())
 }
 
-fn handoff_fields(env: &Env, journal: &NebulaJournal) -> HandoffFields {
-    HandoffFields {
-        note_commitment: hex32(env, &journal.stellar_note_commitment),
-        amount: journal.amount.parse::<i128>().unwrap(),
-        nullifier: hex32(env, &journal.claim_nullifier),
-        event_commitment: hex32(env, &journal.event_commitment),
+fn u256_from_bytes32_test(env: &Env, value: &BytesN<32>) -> U256 {
+    U256::from_be_bytes(env, &Bytes::from(value.clone()))
+}
+
+fn private_pool_deposit(
+    env: &Env,
+    private_pool: &Address,
+    amount: i128,
+    note_commitment: &BytesN<32>,
+) -> PrivatePoolDeposit {
+    PrivatePoolDeposit {
+        proof: PrivatePoolProof {
+            proof: Groth16Proof {
+                a: Bn254G1Affine::from_bytes(BytesN::from_array(env, &[1u8; 64])),
+                b: Bn254G2Affine::from_bytes(BytesN::from_array(env, &[2u8; 128])),
+                c: Bn254G1Affine::from_bytes(BytesN::from_array(env, &[3u8; 64])),
+            },
+            root: U256::from_u32(env, 1),
+            input_nullifiers: Vec::new(env),
+            output_commitment0: u256_from_bytes32_test(env, note_commitment),
+            output_commitment1: U256::from_u32(env, 8),
+            public_amount: u256_from_i128_test(env, amount),
+            ext_data_hash: BytesN::from_array(env, &[9u8; 32]),
+            asp_membership_root: U256::from_u32(env, 11),
+            asp_non_membership_root: U256::from_u32(env, 12),
+        },
+        ext_data: PrivatePoolExtData {
+            recipient: private_pool.clone(),
+            ext_amount: I256::from_i128(env, amount),
+            encrypted_output0: Bytes::from_slice(env, b"encrypted-output-0"),
+            encrypted_output1: Bytes::from_slice(env, b"encrypted-output-1"),
+        },
     }
 }
 
@@ -528,20 +507,18 @@ fn setup() -> Setup {
     let router = RouterHarnessClient::new(&env, &verifier_router);
     let digest: BytesN<32> = env.crypto().sha256(&journal).into();
     router.configure(&seal, &image_id, &digest, &false);
-    let pool_adapter = env.register(PoolAdapterHarness, ());
+    let private_pool = env.register(PrivatePoolHarness, ());
     let cctp_forwarder = env.register(CctpForwarderHarness, ());
 
     let contract_id = env.register(NebulaRelay, ());
     let client = NebulaRelayClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
-    let claimant = Address::generate(&env);
     let asset = Address::generate(&env);
     let witness = load_witness(fixture("valid-lock.json")).unwrap();
 
     client.initialize(
         &admin,
         &verifier_router,
-        &pool_adapter,
         &cctp_forwarder,
         &hex32(&env, &witness.expected.cctp_mint_recipient),
         &BytesN::from_array(&env, &TEST_IMAGE_ID),
@@ -564,18 +541,17 @@ fn setup() -> Setup {
         &witness.expected.expires_at_ledger,
         &true,
     );
+    client.set_private_pool(&admin, &private_pool);
 
     let setup = Setup {
         env,
         contract_id,
         verifier_router,
-        pool_adapter,
+        private_pool,
         cctp_forwarder,
-        asset,
         admin,
-        claimant,
     };
-    setup.configure_adapter_from_journal(&valid_journal(), false);
+    setup.configure_private_pool_from_journal(&valid_journal(), false);
     setup.configure_cctp(false);
     setup
 }
@@ -614,154 +590,218 @@ fn valid_journal() -> NebulaJournal {
     validate_witness(&witness).unwrap()
 }
 
+fn private_deposit_for_journal(setup: &Setup, journal: &NebulaJournal) -> PrivatePoolDeposit {
+    let amount = journal.settlement_amount.parse::<i128>().unwrap();
+    let note_commitment = hex32(&setup.env, &journal.stellar_note_commitment);
+    private_pool_deposit(&setup.env, &setup.private_pool, amount, &note_commitment)
+}
+
 #[test]
-fn valid_claim_stores_nullifier_and_record() {
+fn private_pool_claim_stores_nullifier_without_claimant_record() {
     let s = setup();
     let client = s.client();
+    let model = valid_journal();
+    let amount = model.settlement_amount.parse::<i128>().unwrap();
+    let note_commitment = hex32(&s.env, &model.stellar_note_commitment);
+    let private_deposit = private_pool_deposit(&s.env, &s.private_pool, amount, &note_commitment);
     let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     let expected_digest = s.configure_router(&seal, &image_id, &journal, false);
-    let receipt = client.claim(
-        &s.claimant,
+    s.configure_private_pool_from_journal(&model, false);
+
+    let receipt = client.claim_to_private_pool(
         &seal,
         &image_id,
         &journal,
         &cctp_message(&s.env),
         &cctp_attestation(&s.env),
-        &Bytes::new(&s.env),
+        &private_deposit,
     );
 
     assert_eq!(receipt.nullifier, nullifier);
+    assert_eq!(receipt.settlement_amount, amount);
+    assert_eq!(receipt.private_pool, s.private_pool);
     assert!(client.is_claimed(&nullifier));
-    let record = client.get_claim(&nullifier).unwrap();
-    assert_eq!(record.amount, 100_000_000);
-    assert_eq!(record.cctp_message_hash, receipt.cctp_message_hash);
-    let note_record = client.get_note(&receipt.note_commitment).unwrap();
-    assert_eq!(note_record, record);
+    let record = client.get_private_claim(&nullifier).unwrap();
+    assert_eq!(record.settlement_amount, amount);
+    assert_eq!(record.private_pool, s.private_pool);
+    assert_eq!(
+        record.pool_output_commitment0,
+        private_deposit.proof.output_commitment0
+    );
+    assert_eq!(s.private_pool().was_called(), true);
+    assert_eq!(s.private_pool().last_sender(), Some(s.contract_id.clone()));
+    assert_eq!(
+        s.private_pool().last_recipient(),
+        Some(s.private_pool.clone())
+    );
+    assert_eq!(
+        s.private_pool().last_ext_amount().unwrap().to_i128(),
+        Some(amount)
+    );
     assert_eq!(s.router().last_journal_digest(), Some(expected_digest));
     assert!(s.cctp().was_called());
 }
 
 #[test]
-fn claim_hands_off_private_note_to_adapter() {
+fn private_pool_replay_fails_without_second_pool_call() {
     let s = setup();
     let client = s.client();
-    let (seal, image_id, journal, _) = artifact_parts(&s.env, &fixture("valid-lock.json"));
-    let payload = Bytes::from_slice(&s.env, b"mode-a-private-payments-handoff-v1");
+    let model = valid_journal();
+    let amount = model.settlement_amount.parse::<i128>().unwrap();
+    let note_commitment = hex32(&s.env, &model.stellar_note_commitment);
+    let private_deposit = private_pool_deposit(&s.env, &s.private_pool, amount, &note_commitment);
+    let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     s.configure_router(&seal, &image_id, &journal, false);
-    s.configure_adapter_from_journal(&valid_journal(), false);
+    s.configure_private_pool_from_journal(&model, false);
 
-    let receipt = client.claim(
-        &s.claimant,
+    client.claim_to_private_pool(
         &seal,
         &image_id,
         &journal,
         &cctp_message(&s.env),
         &cctp_attestation(&s.env),
-        &payload,
+        &private_deposit,
     );
-
-    assert!(s.adapter().was_called());
-    assert_eq!(
-        s.adapter().last_note(),
-        Some(receipt.note_commitment.clone())
-    );
-    assert_eq!(s.adapter().last_amount(), Some(receipt.amount));
-    assert_eq!(s.adapter().last_asset(), Some(s.asset.clone()));
-    assert_eq!(s.adapter().last_payload(), Some(payload));
-}
-
-#[test]
-fn adapter_rejects_non_relay_handoff() {
-    let s = setup();
-    let journal = valid_journal();
-    let fields = handoff_fields(&s.env, &journal);
-    let wrong_relay = Address::generate(&s.env);
-    let payload = Bytes::from_slice(&s.env, b"direct-non-relay-call");
-
-    assert!(s
-        .adapter()
-        .try_credit_note_from_relay(
-            &wrong_relay,
-            &s.claimant,
-            &fields.note_commitment,
-            &fields.amount,
-            &s.asset,
-            &fields.nullifier,
-            &fields.event_commitment,
-            &payload,
-        )
-        .is_err());
-}
-
-#[test]
-fn adapter_failure_rolls_back_nullifier_storage() {
-    let s = setup();
-    let client = s.client();
-    let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
-    let model = valid_journal();
-    let fields = handoff_fields(&s.env, &model);
-    s.configure_router(&seal, &image_id, &journal, false);
-    s.configure_adapter_from_journal(&model, true);
 
     assert!(client
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
-    assert!(!client.is_claimed(&nullifier));
-    assert!(client.get_claim(&nullifier).is_none());
-    assert!(client.get_note(&fields.note_commitment).is_none());
+    assert!(client.is_claimed(&nullifier));
 }
 
 #[test]
-fn cctp_settlement_failure_rolls_back_before_handoff_and_storage() {
+fn private_pool_wrong_amount_fails_before_cctp_settlement() {
     let s = setup();
     let client = s.client();
+    let model = valid_journal();
+    let amount = model.settlement_amount.parse::<i128>().unwrap();
+    let note_commitment = hex32(&s.env, &model.stellar_note_commitment);
+    let wrong_deposit =
+        private_pool_deposit(&s.env, &s.private_pool, amount - 1, &note_commitment);
+    let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
+    s.configure_router(&seal, &image_id, &journal, false);
+    s.configure_private_pool_from_journal(&model, false);
+
+    assert!(client
+        .try_claim_to_private_pool(
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &wrong_deposit,
+        )
+        .is_err());
+    assert!(!s.cctp().was_called());
+    assert!(!s.private_pool().was_called());
+    assert!(!client.is_claimed(&nullifier));
+}
+
+#[test]
+fn private_pool_wrong_note_commitment_fails_before_cctp_settlement() {
+    let s = setup();
+    let client = s.client();
+    let model = valid_journal();
+    let amount = model.settlement_amount.parse::<i128>().unwrap();
+    let wrong_note = BytesN::from_array(&s.env, &[0x99; 32]);
+    let wrong_deposit = private_pool_deposit(&s.env, &s.private_pool, amount, &wrong_note);
+    let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
+    s.configure_router(&seal, &image_id, &journal, false);
+    s.configure_private_pool_from_journal(&model, false);
+
+    assert!(client
+        .try_claim_to_private_pool(
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &wrong_deposit,
+        )
+        .is_err());
+    assert!(!s.cctp().was_called());
+    assert!(!s.private_pool().was_called());
+    assert!(!client.is_claimed(&nullifier));
+}
+
+#[test]
+fn private_pool_failure_rolls_back_nullifier_storage() {
+    let s = setup();
+    let client = s.client();
+    let model = valid_journal();
+    let amount = model.settlement_amount.parse::<i128>().unwrap();
+    let note_commitment = hex32(&s.env, &model.stellar_note_commitment);
+    let private_deposit = private_pool_deposit(&s.env, &s.private_pool, amount, &note_commitment);
+    let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
+    s.configure_router(&seal, &image_id, &journal, false);
+    s.configure_private_pool_from_journal(&model, true);
+
+    assert!(client
+        .try_claim_to_private_pool(
+            &seal,
+            &image_id,
+            &journal,
+            &cctp_message(&s.env),
+            &cctp_attestation(&s.env),
+            &private_deposit,
+        )
+        .is_err());
+    assert!(!client.is_claimed(&nullifier));
+    assert!(client.get_private_claim(&nullifier).is_none());
+}
+
+#[test]
+fn cctp_settlement_failure_rolls_back_before_private_pool_and_storage() {
+    let s = setup();
+    let client = s.client();
+    let model = valid_journal();
+    let private_deposit = private_deposit_for_journal(&s, &model);
     let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     s.configure_router(&seal, &image_id, &journal, false);
     s.configure_cctp(true);
 
     assert!(client
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
-    assert!(!s.adapter().was_called());
+    assert!(!s.private_pool().was_called());
     assert!(!client.is_claimed(&nullifier));
 }
 
 #[test]
-fn wrong_cctp_message_or_attestation_fails_before_handoff() {
+fn wrong_cctp_message_or_attestation_fails_before_private_pool() {
     let s = setup();
     let client = s.client();
+    let model = valid_journal();
+    let private_deposit = private_deposit_for_journal(&s, &model);
     let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     s.configure_router(&seal, &image_id, &journal, false);
 
     assert!(client
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal,
             &bytes_from_hex(&s.env, "0xff"),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
     assert!(!s.cctp().was_called());
-    assert!(!s.adapter().was_called());
+    assert!(!s.private_pool().was_called());
     assert!(!client.is_claimed(&nullifier));
 }
 
@@ -772,17 +812,17 @@ fn wrong_cctp_destination_or_mint_recipient_journal_fails() {
     let mut wrong_domain = valid_journal();
     wrong_domain.cctp_destination_domain = 26;
     let (seal, image_id, journal_bytes) = signed_journal(&s.env, &wrong_domain);
+    let private_deposit = private_deposit_for_journal(&s, &wrong_domain);
     s.configure_router(&seal, &image_id, &journal_bytes, false);
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal_bytes,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 
@@ -790,17 +830,17 @@ fn wrong_cctp_destination_or_mint_recipient_journal_fails() {
     wrong_recipient.cctp_mint_recipient =
         "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_owned();
     let (seal, image_id, journal_bytes) = signed_journal(&s.env, &wrong_recipient);
+    let private_deposit = private_deposit_for_journal(&s, &wrong_recipient);
     s.configure_router(&seal, &image_id, &journal_bytes, false);
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal_bytes,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }
@@ -809,27 +849,27 @@ fn wrong_cctp_destination_or_mint_recipient_journal_fails() {
 fn replay_fails() {
     let s = setup();
     let client = s.client();
+    let model = valid_journal();
+    let private_deposit = private_deposit_for_journal(&s, &model);
     let (seal, image_id, journal, _) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     s.configure_router(&seal, &image_id, &journal, false);
-    client.claim(
-        &s.claimant,
+    client.claim_to_private_pool(
         &seal,
         &image_id,
         &journal,
         &cctp_message(&s.env),
         &cctp_attestation(&s.env),
-        &Bytes::new(&s.env),
+        &private_deposit,
     );
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }
@@ -837,18 +877,19 @@ fn replay_fails() {
 #[test]
 fn wrong_image_id_fails() {
     let s = setup();
+    let model = valid_journal();
+    let private_deposit = private_deposit_for_journal(&s, &model);
     let (seal, _, journal, _) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     let bad_image = BytesN::from_array(&s.env, &[9u8; 32]);
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &bad_image,
             &journal,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env)
+            &private_deposit
         )
         .is_err());
 }
@@ -856,6 +897,8 @@ fn wrong_image_id_fails() {
 #[test]
 fn tampered_seal_fails() {
     let s = setup();
+    let model = valid_journal();
+    let private_deposit = private_deposit_for_journal(&s, &model);
     let (_, image_id, journal, _) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     let seal = bytes_from_hex(
         &s.env,
@@ -863,14 +906,13 @@ fn tampered_seal_fails() {
     );
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }
@@ -878,43 +920,45 @@ fn tampered_seal_fails() {
 #[test]
 fn router_rejects_wrong_journal_digest() {
     let s = setup();
+    let model = valid_journal();
+    let private_deposit = private_deposit_for_journal(&s, &model);
     let (seal, image_id, journal, _) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     let wrong_digest = BytesN::from_array(&s.env, &[9u8; 32]);
     s.configure_router_with_digest(&seal, &image_id, &wrong_digest, false);
 
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }
 
 #[test]
-fn router_error_fails_before_handoff_and_storage() {
+fn router_error_fails_before_private_pool_and_storage() {
     let s = setup();
+    let model = valid_journal();
+    let private_deposit = private_deposit_for_journal(&s, &model);
     let (seal, image_id, journal, nullifier) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     s.configure_router(&seal, &image_id, &journal, true);
 
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
-    assert!(!s.adapter().was_called());
+    assert!(!s.private_pool().was_called());
     assert!(!s.client().is_claimed(&nullifier));
 }
 
@@ -998,17 +1042,17 @@ fn contract_rejects_wrong_token_journal() {
     let mut journal = valid_journal();
     journal.token = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned();
     let (seal, image_id, journal_bytes) = signed_journal(&s.env, &journal);
+    let private_deposit = private_deposit_for_journal(&s, &journal);
     s.configure_router(&seal, &image_id, &journal_bytes, false);
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal_bytes,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }
@@ -1019,17 +1063,17 @@ fn contract_rejects_wrong_escrow_journal() {
     let mut journal = valid_journal();
     journal.escrow_contract = "0x2222222222222222222222222222222222222222".to_owned();
     let (seal, image_id, journal_bytes) = signed_journal(&s.env, &journal);
+    let private_deposit = private_deposit_for_journal(&s, &journal);
     s.configure_router(&seal, &image_id, &journal_bytes, false);
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal_bytes,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }
@@ -1041,17 +1085,17 @@ fn contract_rejects_bad_compliance_root_journal() {
     journal.compliance_root =
         "0x8888888888888888888888888888888888888888888888888888888888888888".to_owned();
     let (seal, image_id, journal_bytes) = signed_journal(&s.env, &journal);
+    let private_deposit = private_deposit_for_journal(&s, &journal);
     s.configure_router(&seal, &image_id, &journal_bytes, false);
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal_bytes,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }
@@ -1062,17 +1106,17 @@ fn contract_rejects_wrong_destination_journal() {
     let mut journal = valid_journal();
     journal.destination_chain_id = 1_502;
     let (seal, image_id, journal_bytes) = signed_journal(&s.env, &journal);
+    let private_deposit = private_deposit_for_journal(&s, &journal);
     s.configure_router(&seal, &image_id, &journal_bytes, false);
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal_bytes,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }
@@ -1085,34 +1129,34 @@ fn contract_rejects_malformed_public_outputs() {
     zero_note.stellar_note_commitment =
         "0x0000000000000000000000000000000000000000000000000000000000000000".to_owned();
     let (seal, image_id, journal_bytes) = signed_journal(&s.env, &zero_note);
+    let private_deposit = private_deposit_for_journal(&s, &zero_note);
     s.configure_router(&seal, &image_id, &journal_bytes, false);
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal_bytes,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 
     let mut wrong_bucket = valid_journal();
     wrong_bucket.amount_bucket += 1;
     let (seal, image_id, journal_bytes) = signed_journal(&s.env, &wrong_bucket);
+    let private_deposit = private_deposit_for_journal(&s, &wrong_bucket);
     s.configure_router(&seal, &image_id, &journal_bytes, false);
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal_bytes,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }
@@ -1121,6 +1165,8 @@ fn contract_rejects_malformed_public_outputs() {
 fn contract_rejects_unregistered_source_and_root_from_journal() {
     let s = setup();
     let (seal, image_id, journal, _) = artifact_parts(&s.env, &fixture("valid-lock.json"));
+    let model = valid_journal();
+    let private_deposit = private_deposit_for_journal(&s, &model);
     let other = Address::generate(&s.env);
     let contract_id = s.env.register(NebulaRelay, ());
     let client = NebulaRelayClient::new(&s.env, &contract_id);
@@ -1128,7 +1174,6 @@ fn contract_rejects_unregistered_source_and_root_from_journal() {
     client.initialize(
         &s.admin,
         &s.verifier_router,
-        &other,
         &s.cctp_forwarder,
         &hex32(&s.env, &witness.expected.cctp_mint_recipient),
         &BytesN::from_array(&s.env, &TEST_IMAGE_ID),
@@ -1136,14 +1181,13 @@ fn contract_rejects_unregistered_source_and_root_from_journal() {
         &hex32(&s.env, &witness.expected.network_domain),
     );
     assert!(client
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }
@@ -1151,18 +1195,19 @@ fn contract_rejects_unregistered_source_and_root_from_journal() {
 #[test]
 fn paused_claim_fails() {
     let s = setup();
+    let model = valid_journal();
+    let private_deposit = private_deposit_for_journal(&s, &model);
     let (seal, image_id, journal, _) = artifact_parts(&s.env, &fixture("valid-lock.json"));
     s.client().pause(&s.admin);
     assert!(s
         .client()
-        .try_claim(
-            &s.claimant,
+        .try_claim_to_private_pool(
             &seal,
             &image_id,
             &journal,
             &cctp_message(&s.env),
             &cctp_attestation(&s.env),
-            &Bytes::new(&s.env),
+            &private_deposit,
         )
         .is_err());
 }

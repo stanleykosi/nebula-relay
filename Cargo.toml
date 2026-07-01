@@ -4,7 +4,6 @@ members = [
     "risc0/nebula-guest",
     "risc0/methods",
     "risc0/nebula-host",
-    "contracts/stellar/nebula-pool-adapter",
     "contracts/stellar/nebula-relay",
 ]
 resolver = "2"

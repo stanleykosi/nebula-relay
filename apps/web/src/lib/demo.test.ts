@@ -30,7 +30,7 @@ describe("frontend demo state", () => {
     expect(state.nullifierStored).toBe(true);
     expect(state.replayFailure).toContain("NullifierAlreadyClaimed");
     expect(state.invalidTokenFailure).toContain("Invalid token rejected");
-    expect(state.handoffStatus).toContain("Mode A");
+    expect(state.privatePoolStatus).toContain("Private pool path ready");
     expect(() => AuditorPacketSchema.parse(state.auditorPacket)).not.toThrow();
     expect(state.auditorPacket?.verificationInstructions.length).toBeGreaterThan(
       0

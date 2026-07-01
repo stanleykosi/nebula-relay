@@ -135,14 +135,14 @@ function validateProof(value) {
   assert((value.sealHex.length - 2) / 2 > 4, "proof.sealHex must include a verifier selector and proof bytes");
   assert(isHex(value.imageIdHex, 32), "proof.imageIdHex invalid");
   assert(isHexBytes(value.journalHex), "proof.journalHex invalid");
-  assert((value.journalHex.length - 2) / 2 === 425, "proof.journalHex must encode 425 bytes");
+  assert((value.journalHex.length - 2) / 2 === 465, "proof.journalHex must encode 465 bytes");
   assert(isHex(value.journalDigestHex, 32), "proof.journalDigestHex invalid");
   assert(isHex(value.witnessHash, 32), "proof.witnessHash invalid");
   validateJournal(value.publicOutputs);
 }
 
 function validateJournal(value) {
-  assert(value.version === 1, "journal.version must be 1");
+  assert(value.version === 2, "journal.version must be 2");
   assert(isHex(value.domain, 32), "journal.domain invalid");
   assert(Number.isInteger(value.sourceChainId), "journal.sourceChainId invalid");
   assert(Number.isInteger(value.sourceBlockNumber), "journal.sourceBlockNumber invalid");
@@ -151,6 +151,8 @@ function validateJournal(value) {
   assert(isHex(value.token, 20), "journal.token invalid");
   assert(/^(0|[1-9][0-9]*)$/.test(value.amount), "journal.amount invalid");
   assert(Number.isInteger(value.amountBucket), "journal.amountBucket invalid");
+  assert(/^(0|[1-9][0-9]*)$/.test(value.settlementAmount), "journal.settlementAmount invalid");
+  assert(Number.isInteger(value.settlementAmountBucket), "journal.settlementAmountBucket invalid");
   assert(isHex(value.stellarNoteCommitment, 32), "journal.stellarNoteCommitment invalid");
   assert(isHex(value.complianceRoot, 32), "journal.complianceRoot invalid");
   assert(Number.isInteger(value.complianceMode), "journal.complianceMode invalid");
@@ -164,6 +166,19 @@ function validateJournal(value) {
   assert(isHex(value.cctpMessageHash, 32), "journal.cctpMessageHash invalid");
   assert(isHex(value.cctpAttestationHash, 32), "journal.cctpAttestationHash invalid");
   assert(isHex(value.cctpMintRecipient, 32), "journal.cctpMintRecipient invalid");
+  assert(/^(0|[1-9][0-9]*)$/.test(value.cctpFeeExecuted), "journal.cctpFeeExecuted invalid");
+  assert(
+    BigInt(value.amount) - BigInt(value.cctpFeeExecuted) === BigInt(value.settlementAmount),
+    "journal settlement amount must equal gross amount minus CCTP fee"
+  );
+  assert(
+    value.amountBucket === Number(BigInt(value.amount) / 1000000n),
+    "journal.amountBucket mismatch"
+  );
+  assert(
+    value.settlementAmountBucket === Number(BigInt(value.settlementAmount) / 1000000n),
+    "journal.settlementAmountBucket mismatch"
+  );
 }
 
 function validateAuditorPacket(value) {

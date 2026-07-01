@@ -7,7 +7,7 @@ Compliance-forward proof-gated relay prototype for private Stellar-side claims, 
 Nebula Relay is a hackathon MVP that proves an approved EVM stablecoin lock happened, then lets a Stellar contract accept a private-note-compatible claim only after proof verification and policy checks pass.
 
 ```text
-EVM lock event + CCTP burn/message -> LockWitness -> RISC Zero journal/proof artifact -> Stellar CCTP settlement -> NebulaRelay claim -> private-note-compatible handoff
+EVM lock event + CCTP burn/message -> LockWitness -> RISC Zero journal/proof artifact -> Stellar CCTP settlement -> NebulaRelay private-pool claim -> nullifier + private note
 ```
 
 The hosted configuration targets testnet mode. The live testnet transcript binds CCTP message, attestation, nonce, and mint-recipient fields into the proof journal and requires the Stellar claim path to settle through the configured CCTP Forwarder before storing the nullifier. Fixture data remains available for UI smoke tests, but proof artifacts must be `local-groth16` or `remote`.
@@ -27,13 +27,12 @@ The implemented RISC Zero guest/host path validates a structured `LockWitness` a
 - The witness now carries a Circle CCTP V2 message and the proof-side validator checks source domain, destination domain, nonce, destination caller, burn token, burn amount, mint recipient, message sender, max fee, and non-empty hook data.
 - Bad token, wrong escrow, bad compliance, wrong destination, malformed public outputs, wrong image ID, bad seal, wrong journal digest, and replay fixtures fail in tests.
 
-Current proof posture: the hosted testnet configuration uses Boundless `remote` proof mode or `local-groth16` fallback, and the Stellar claim contract always calls the configured verifier router.
+Current proof posture: the hosted testnet configuration uses Boundless `remote` proof mode or explicit `local-groth16` proof generation, and the Stellar claim contract always calls the configured verifier router.
 
 ## What Runs On Stellar
 
 The core state transition is the `NebulaRelay` Soroban contract. It:
 
-- Requires claimant authorization.
 - Rejects paused claims.
 - Checks the accepted image ID.
 - Calls a verifier-router-compatible `verify(seal, image_id, journal_digest)` path.
@@ -41,8 +40,8 @@ The core state transition is the `NebulaRelay` Soroban contract. It:
 - Checks registered source config and compliance root config.
 - Checks CCTP settlement fields and calls the configured `mint_and_forward(message, attestation)` adapter before claim storage.
 - Stores the nullifier to prevent replay.
-- Calls a Nebula-owned pool-adapter handoff boundary.
-- Stores claim and note records readable with `get_claim` and `get_note`.
+- Calls an upstream-compatible Stellar Private Payments pool `transact` boundary with the relay as sender.
+- Stores nullifier/private-claim metadata only, readable with `get_private_claim` and `get_private_note`; no final recipient account is stored.
 
 ## Original Vs Reused
 
@@ -52,7 +51,7 @@ Original Nebula work includes:
 - Canonical `Locked` event parsing and TypeScript witness builder.
 - Shared schemas for `LockWitness`, `NebulaJournal`, `ProofArtifact`, and `AuditorPacket`.
 - RISC Zero guest/host proof-artifact boundary.
-- Stellar `NebulaRelay` contract, verifier-router ABI shim, pool-adapter boundary, and tests.
+- Stellar `NebulaRelay` contract, verifier-router ABI shim, private-pool claim boundary, and tests.
 - CCTP client helpers for EVM `depositForBurnWithHook`, Circle Iris attestation polling, Circle CCTP V2 message parsing, Stellar `mint_and_forward` transaction construction, and proof-friendly settlement binding.
 - Next.js demo UX, fixture flow, failure lab, auditor export, and scripts.
 
@@ -63,7 +62,7 @@ Reused/reference material is documented in [docs/reused-code.md](docs/reused-cod
 - UI fixture data is for smoke tests, not the hosted testnet proof path.
 - Local Stellar contract tests use a router-compatible harness, not a deployed Groth16 verifier stack.
 - Source-chain receipt trie inclusion and finality are not implemented.
-- Private Payments composition is Mode A handoff: Nebula records a private-note-compatible commitment through an adapter boundary. It does not directly credit the upstream pool.
+- Private Payments composition has one supported pool-deposit boundary: `claim_to_private_pool` accepts a `PrivatePoolDeposit` proof artifact, verifies pool recipient/net amount/output note binding, calls the configured pool, and stores no visible claimant.
 - `NebulaCctpEscrow` is deployed on Ethereum Sepolia and implements the atomic source-side lock event plus CCTP burn wrapper.
 - CCTP settlement is proof-bound and enforced in deterministic local tests and in the completed Sepolia -> Stellar testnet transcript; see `artifacts/live-transcript-summary.json`, `artifacts/demo/risc0-verifier-deployment.toml`, and `IMPLEMENTATION_STATUS.md`.
 
@@ -121,6 +120,14 @@ Run the full live Sepolia -> Stellar testnet transcript:
 scripts/run_live_testnet_transcript.sh --yes
 ```
 
+If the upstream Stellar Private Payments testnet deployment does not include a USDC pool, deploy a Nebula-controlled upstream-compatible USDC pool first:
+
+```bash
+bash scripts/deploy_private_payments_usdc_pool.sh
+```
+
+The wrapper defaults to `PRIVATE_PAYMENTS_DEPLOY_MODE=reuse-upstream-hashes`: it reads the current upstream testnet deployment JSON, deploys fresh Nebula-controlled ASP/verifier/key-registry/pool instances from the already-installed upstream WASM hashes, writes `artifacts/private/private-payments-usdc-deployment.json`, updates ignored `.env.local`, and runs `scripts/check_private_pool_testnet.sh`. `PRIVATE_PAYMENTS_DEPLOY_MODE=full-build` keeps the slower local source-build path available.
+
 This command burns `NEBULA_LOCK_AMOUNT` of configured Sepolia test USDC, waits for Circle Iris, submits a Boundless remote Groth16 proof request, claims on Stellar testnet, verifies nullifier storage, verifies replay failure, and writes `artifacts/live-transcript-summary.json`.
 
 Generate the local Groth16 proof artifact:
@@ -167,7 +174,6 @@ NEXT_PUBLIC_NEBULA_CCTP_ESCROW_ADDRESS=
 NEXT_PUBLIC_EVM_MOCK_USDC_ADDRESS=
 NEXT_PUBLIC_NEBULA_RELAY_CONTRACT_ID=
 NEXT_PUBLIC_RISC0_VERIFIER_ROUTER_ID=
-NEXT_PUBLIC_POOL_ADAPTER_CONTRACT_ID=
 NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID=
 ```
 
@@ -207,7 +213,7 @@ Live testnet contracts have been deployed for the source wrapper and Stellar cla
 | EVM fixture | Mock USDC token | `0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` |
 | Stellar fixture | NebulaRelay | Contract tested locally and WASM builds |
 | Stellar fixture | RISC Zero verifier router | Router-compatible harness in tests |
-| Stellar fixture | Pool adapter / handoff wrapper | Harness in tests; Mode A adapter ABI and deployable adapter contract |
+| Stellar fixture | Private pool wrapper | Harness in tests; upstream-compatible private-pool ABI |
 | Stellar testnet | Circle CCTP Forwarder | `CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ` |
 | Stellar testnet | Circle CCTP Message Transmitter | `CBJ6MTCKKZG73PMDZCJMSFRD7DQEMI4FKDH7CGDSV4W6FHCRBCQAVVJY` |
 | Stellar testnet | Circle CCTP Token Messenger Minter | `CDNG7HXAPBWICI2E3AUBP3YZWZELJLYSB6F5CC7WLDTLTHVM74SLRTHP` |
@@ -215,7 +221,7 @@ Live testnet contracts have been deployed for the source wrapper and Stellar cla
 | Stellar testnet | RISC Zero verifier router | `CASPL2YTHEUZMBXL7573IIFSK3SXSBIUOKHDKZJVSE6QR6W6S4NRXANE` |
 | Stellar testnet | RISC Zero Groth16 verifier | `CBWXXMAGJGYKBBVY4R2YRNY7ULFILO4L52DPXZ6JZ2757AOI6YZ5I6U5` |
 | Stellar testnet | RISC Zero verifier emergency stop | `CANRRAIOB2YNP5KTOH5JAOFPURRIFXQJZKN3MEBIZBEHTNLUAXEL6IV2` |
-| Stellar testnet | Pool adapter / handoff wrapper | `CABW53ILEK6T3HPG2CRG5NFT36HCA3QXPKU4HOPY6KCAUPLONPSKD77F` |
+| Stellar testnet | Private Payments USDC pool | `CC4XGYEOY4SLBG4X7YDXGGDJ6C5GLLHPXCNILZYTE5MQGJGJHC75JDES`; deployment JSON: `deployments/stellar-private-payments-usdc-testnet.json` |
 | RISC Zero | Nebula guest image ID | `0x79b0ae7f3c792a2a9b2a8c3786cc7be70c1fa81e06e7f7adc33faf4c9273fe4f` |
 
 Latest live transcript:
@@ -240,8 +246,8 @@ Recorded video and screenshots are not checked into this repo from the terminal 
 
 ## Security Limitations
 
-This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Boundless remote proving, verifier-router validation, CCTP `mint_and_forward` settlement, Nebula claim storage, and replay rejection have been exercised in a live testnet transcript; direct private-pool credit, governance hardening, legal review, regulatory review, and security audits are required before production deployment.
+This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Boundless remote proving, verifier-router validation, CCTP `mint_and_forward` settlement, Nebula claim storage, and replay rejection have been exercised in a live visible-claim testnet transcript. The private-pool claim boundary is implemented and tested, and a Nebula-controlled USDC Private Payments pool is deployed on Stellar testnet. The live privacy script now expects upstream Private Payments `PreparedProverTx` JSON before the EVM burn so the source event binds to the real pool output commitment. A live private-recipient transcript is still pending until that prepared proof output is generated and submitted through `claim_to_private_pool`. Governance hardening, legal review, regulatory review, privacy analysis, and security audits are required before production deployment.
 
 ## Production Path
 
-The testnet path replaces local fixture inputs with Boundless remote or local-Groth16 proof generation, deployed verifier-router verification, a CCTP-backed USDC claim settlement path, and configured Private Payments handoff contracts. The next milestone is hardening this completed testnet transcript into hosted Railway/Vercel orchestration with monitoring, prebuilt prover workers, receipt/finality improvements, and production controls.
+The testnet path replaces local fixture inputs with Boundless remote or local-Groth16 proof generation, deployed verifier-router verification, a CCTP-backed USDC settlement path, and configured Private Payments pool contracts. The next milestone is a hosted Railway/Vercel transcript through `claim_to_private_pool`, fed by upstream prepared-prover JSON or `PrivatePoolDeposit` XDR, plus monitoring, prebuilt prover workers, receipt/finality improvements, denomination/batching privacy work, and production controls.

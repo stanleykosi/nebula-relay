@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use std::{fs, path::Path};
 use thiserror::Error;
 
-pub const JOURNAL_VERSION: u32 = 1;
+pub const JOURNAL_VERSION: u32 = 2;
 
 #[derive(Debug, Error)]
 pub enum NebulaError {
@@ -107,8 +107,13 @@ pub struct NebulaJournal {
     pub source_receipt_root: String,
     pub escrow_contract: String,
     pub token: String,
+    /// Gross source-chain lock/burn amount.
     pub amount: String,
     pub amount_bucket: u64,
+    /// Net CCTP amount after Circle fee. This is the maximum amount Nebula can
+    /// credit into the Stellar private pool.
+    pub settlement_amount: String,
+    pub settlement_amount_bucket: u64,
     pub stellar_note_commitment: String,
     pub compliance_root: String,
     pub compliance_mode: u8,
@@ -122,6 +127,7 @@ pub struct NebulaJournal {
     pub cctp_message_hash: String,
     pub cctp_attestation_hash: String,
     pub cctp_mint_recipient: String,
+    pub cctp_fee_executed: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -247,7 +253,7 @@ pub fn validate_witness(witness: &LockWitness) -> Result<NebulaJournal, NebulaEr
     if computed_cctp_message_hash != cctp_message_hash {
         return Err(NebulaError::Validation("CCTP message hash mismatch"));
     }
-    validate_cctp_v2_message(
+    let cctp_amounts = validate_cctp_v2_message(
         &cctp_message,
         witness.cctp_settlement.source_domain,
         witness.cctp_settlement.destination_domain,
@@ -262,6 +268,8 @@ pub fn validate_witness(witness: &LockWitness) -> Result<NebulaJournal, NebulaEr
     let event_commitment = event_commitment(witness, amount)?;
     let amount_bucket = u64::try_from(amount / 1_000_000)
         .map_err(|_| NebulaError::Validation("amount bucket overflow"))?;
+    let settlement_amount_bucket = u64::try_from(cctp_amounts.net_amount / 1_000_000)
+        .map_err(|_| NebulaError::Validation("settlement amount bucket overflow"))?;
 
     Ok(NebulaJournal {
         version: JOURNAL_VERSION,
@@ -273,6 +281,8 @@ pub fn validate_witness(witness: &LockWitness) -> Result<NebulaJournal, NebulaEr
         token: normalize_hex_20(&witness.token_address)?,
         amount: amount.to_string(),
         amount_bucket,
+        settlement_amount: cctp_amounts.net_amount.to_string(),
+        settlement_amount_bucket,
         stellar_note_commitment: normalize_hex_32(&witness.stellar_note_commitment)?,
         compliance_root: normalize_hex_32(&witness.compliance_root)?,
         compliance_mode: witness.compliance_mode.code(),
@@ -286,12 +296,15 @@ pub fn validate_witness(witness: &LockWitness) -> Result<NebulaJournal, NebulaEr
         cctp_message_hash: to_hex_32(&cctp_message_hash),
         cctp_attestation_hash: to_hex_32(&cctp_attestation_hash),
         cctp_mint_recipient: to_hex_32(&cctp_mint_recipient),
+        cctp_fee_executed: cctp_amounts.fee_executed.to_string(),
     })
 }
 
 pub fn encode_journal(journal: &NebulaJournal) -> Result<Vec<u8>, NebulaError> {
     let amount = parse_u128_decimal(&journal.amount)?;
-    let mut out = Vec::with_capacity(425);
+    let settlement_amount = parse_u128_decimal(&journal.settlement_amount)?;
+    let cctp_fee_executed = parse_u128_decimal(&journal.cctp_fee_executed)?;
+    let mut out = Vec::with_capacity(465);
     out.extend_from_slice(&journal.version.to_be_bytes());
     out.extend_from_slice(&parse_hex_32(&journal.domain)?);
     out.extend_from_slice(&journal.source_chain_id.to_be_bytes());
@@ -301,6 +314,8 @@ pub fn encode_journal(journal: &NebulaJournal) -> Result<Vec<u8>, NebulaError> {
     out.extend_from_slice(&parse_hex_20(&journal.token)?);
     out.extend_from_slice(&amount.to_be_bytes());
     out.extend_from_slice(&journal.amount_bucket.to_be_bytes());
+    out.extend_from_slice(&settlement_amount.to_be_bytes());
+    out.extend_from_slice(&journal.settlement_amount_bucket.to_be_bytes());
     out.extend_from_slice(&parse_hex_32(&journal.stellar_note_commitment)?);
     out.extend_from_slice(&parse_hex_32(&journal.compliance_root)?);
     out.push(journal.compliance_mode);
@@ -314,6 +329,7 @@ pub fn encode_journal(journal: &NebulaJournal) -> Result<Vec<u8>, NebulaError> {
     out.extend_from_slice(&parse_hex_32(&journal.cctp_message_hash)?);
     out.extend_from_slice(&parse_hex_32(&journal.cctp_attestation_hash)?);
     out.extend_from_slice(&parse_hex_32(&journal.cctp_mint_recipient)?);
+    out.extend_from_slice(&cctp_fee_executed.to_be_bytes());
     Ok(out)
 }
 
@@ -371,7 +387,7 @@ fn validate_cctp_v2_message(
     expected_burn_token: &[u8; 20],
     expected_amount: u128,
     expected_message_sender: &[u8; 20],
-) -> Result<(), NebulaError> {
+) -> Result<CctpMessageAmounts, NebulaError> {
     if message.len() <= 376 {
         return Err(NebulaError::Validation("CCTP message missing hook data"));
     }
@@ -416,12 +432,30 @@ fn validate_cctp_v2_message(
             "CCTP max fee must be less than amount",
         ));
     }
+    let fee_executed = read_u256_as_u128(message, body + 164)?;
+    if fee_executed > max_fee || fee_executed >= amount {
+        return Err(NebulaError::Validation("CCTP fee exceeds allowed amount"));
+    }
     if read_u32_be(message, 140)? == 0 {
         return Err(NebulaError::Validation(
             "CCTP min finality threshold is zero",
         ));
     }
-    Ok(())
+    let net_amount = amount
+        .checked_sub(fee_executed)
+        .ok_or(NebulaError::Validation("CCTP net amount underflow"))?;
+    if net_amount == 0 {
+        return Err(NebulaError::Validation("zero CCTP settlement amount"));
+    }
+    Ok(CctpMessageAmounts {
+        fee_executed,
+        net_amount,
+    })
+}
+
+struct CctpMessageAmounts {
+    fee_executed: u128,
+    net_amount: u128,
 }
 
 fn evm_address_as_bytes32(address: &[u8; 20]) -> [u8; 32] {
@@ -530,12 +564,16 @@ mod tests {
         let witness = load_witness(fixture("valid-lock.json")).unwrap();
         let journal = validate_witness(&witness).unwrap();
         let encoded = encode_journal(&journal).unwrap();
-        assert_eq!(encoded.len(), 425);
+        assert_eq!(encoded.len(), 465);
         assert_eq!(
             journal.domain,
             "0x4e4542554c415f5354454c4c41525f544553544e45545f563100000000000000"
         );
+        assert_eq!(journal.version, 2);
         assert_eq!(journal.amount_bucket, 100);
+        assert_eq!(journal.settlement_amount, "100000000");
+        assert_eq!(journal.settlement_amount_bucket, 100);
+        assert_eq!(journal.cctp_fee_executed, "0");
         assert_eq!(journal.cctp_destination_domain, 27);
         assert_eq!(
             journal.cctp_message_hash,

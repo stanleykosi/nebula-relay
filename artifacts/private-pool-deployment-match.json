@@ -1,0 +1,15 @@
+{
+  "deploymentPath": "/home/stanley/nebula-relay/deployments/stellar-private-payments-usdc-testnet.json",
+  "deploymentNetwork": "testnet",
+  "pool": {
+    "poolContractId": "CC4XGYEOY4SLBG4X7YDXGGDJ6C5GLLHPXCNILZYTE5MQGJGJHC75JDES",
+    "tokenContractId": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+    "deploymentLedger": 3369482,
+    "enabled": true,
+    "asset": {
+      "kind": "classic",
+      "code": "USDC",
+      "issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+    }
+  }
+}

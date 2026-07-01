@@ -26,7 +26,7 @@ Builds and deploys the NebulaRelay Soroban contract to Stellar testnet.
 Required for a complete initialized deployment:
   STELLAR_SOURCE                 Funded Stellar CLI identity
   RISC0_VERIFIER_ROUTER_ID       Deployed Nethermind RISC Zero verifier router ID
-  POOL_ADAPTER_CONTRACT_ID       Nebula private-payments handoff adapter ID
+  PRIVATE_PAYMENTS_POOL_ID       Upstream Stellar Private Payments pool contract ID
   STELLAR_ASSET_CONTRACT_ID      Stellar asset contract ID used by claims
   CCTP_STELLAR_FORWARDER_ID      Circle Stellar CCTP Forwarder contract ID
   CCTP_STELLAR_FORWARDER_BYTES32 Circle Forwarder contract ID encoded as bytes32
@@ -105,13 +105,13 @@ if [ "$DRY_RUN" = "1" ]; then
   echo "Dry run: would write $CONTRACT_ENV_PATH and $DEPLOYMENT_JSON_PATH"
   if [ -z "$SOURCE" ] ||
     [ -z "${RISC0_VERIFIER_ROUTER_ID:-}" ] ||
-    [ -z "${POOL_ADAPTER_CONTRACT_ID:-}" ] ||
+    [ -z "${PRIVATE_PAYMENTS_POOL_ID:-}" ] ||
     [ -z "${STELLAR_ASSET_CONTRACT_ID:-}" ] ||
     [ -z "${CCTP_STELLAR_FORWARDER_ID:-}" ] ||
     [ -z "${CCTP_STELLAR_FORWARDER_BYTES32:-}" ]; then
-    echo "Dry run: initialized testnet deployment requires source, router, pool adapter, asset, CCTP Forwarder, and CCTP mint-recipient bytes32 values."
+    echo "Dry run: initialized testnet deployment requires source, router, private pool, asset, CCTP Forwarder, and CCTP mint-recipient bytes32 values."
   else
-    echo "Dry run: would initialize NebulaRelay with configured verifier, pool adapter, asset, and CCTP settlement IDs."
+    echo "Dry run: would initialize NebulaRelay with configured verifier, private pool, asset, and CCTP settlement IDs."
   fi
   exit 0
 fi
@@ -123,11 +123,11 @@ fi
 
 if [ -z "$SOURCE" ] ||
   [ -z "${RISC0_VERIFIER_ROUTER_ID:-}" ] ||
-  [ -z "${POOL_ADAPTER_CONTRACT_ID:-}" ] ||
+  [ -z "${PRIVATE_PAYMENTS_POOL_ID:-}" ] ||
   [ -z "${STELLAR_ASSET_CONTRACT_ID:-}" ] ||
   [ -z "${CCTP_STELLAR_FORWARDER_ID:-}" ] ||
   [ -z "${CCTP_STELLAR_FORWARDER_BYTES32:-}" ]; then
-  echo "Blocker: testnet deploy requires STELLAR_SOURCE, RISC0_VERIFIER_ROUTER_ID, POOL_ADAPTER_CONTRACT_ID, STELLAR_ASSET_CONTRACT_ID, CCTP_STELLAR_FORWARDER_ID, and CCTP_STELLAR_FORWARDER_BYTES32." >&2
+  echo "Blocker: testnet deploy requires STELLAR_SOURCE, RISC0_VERIFIER_ROUTER_ID, PRIVATE_PAYMENTS_POOL_ID, STELLAR_ASSET_CONTRACT_ID, CCTP_STELLAR_FORWARDER_ID, and CCTP_STELLAR_FORWARDER_BYTES32." >&2
   exit 1
 fi
 
@@ -167,7 +167,6 @@ stellar contract invoke \
   initialize \
   --admin "$admin" \
   --verifier_router "$RISC0_VERIFIER_ROUTER_ID" \
-  --pool_adapter "$POOL_ADAPTER_CONTRACT_ID" \
   --cctp_forwarder "$CCTP_STELLAR_FORWARDER_ID" \
   --cctp_mint_recipient "$(cli_bytes "$CCTP_STELLAR_FORWARDER_BYTES32")" \
   --accepted_image_id "$(cli_bytes "$IMAGE_ID")" \
@@ -175,13 +174,13 @@ stellar contract invoke \
   --network_domain "$(cli_bytes "$NETWORK_DOMAIN")"
 
 stellar contract invoke \
-  --id "$POOL_ADAPTER_CONTRACT_ID" \
+  --id "$contract_id" \
   --source "$SOURCE" \
   --network "$NETWORK" \
   -- \
-  set_relay \
+  set_private_pool \
   --admin "$admin" \
-  --relay "$contract_id"
+  --private_pool "$PRIVATE_PAYMENTS_POOL_ID"
 
 cat > "$CONTRACT_ENV_PATH" <<EOF
 STELLAR_NETWORK=$NETWORK
@@ -189,7 +188,7 @@ STELLAR_SOURCE=$SOURCE
 NEBULA_RELAY_CONTRACT_ID=$contract_id
 NEBULA_ADMIN=$admin
 RISC0_VERIFIER_ROUTER_ID=$RISC0_VERIFIER_ROUTER_ID
-POOL_ADAPTER_CONTRACT_ID=$POOL_ADAPTER_CONTRACT_ID
+PRIVATE_PAYMENTS_POOL_ID=$PRIVATE_PAYMENTS_POOL_ID
 STELLAR_ASSET_CONTRACT_ID=$STELLAR_ASSET_CONTRACT_ID
 CCTP_STELLAR_FORWARDER_ID=$CCTP_STELLAR_FORWARDER_ID
 CCTP_STELLAR_FORWARDER_BYTES32=$CCTP_STELLAR_FORWARDER_BYTES32
@@ -197,7 +196,7 @@ NEBULA_IMAGE_ID=$IMAGE_ID
 NEBULA_NETWORK_DOMAIN=$NETWORK_DOMAIN
 EOF
 
-node - "$DEPLOYMENT_JSON_PATH" "$contract_id" "$NETWORK" "$SOURCE" "$admin" "$RISC0_VERIFIER_ROUTER_ID" "$POOL_ADAPTER_CONTRACT_ID" "$STELLAR_ASSET_CONTRACT_ID" "$CCTP_STELLAR_FORWARDER_ID" "$CCTP_STELLAR_FORWARDER_BYTES32" "$IMAGE_ID" "$NETWORK_DOMAIN" <<'NODE'
+node - "$DEPLOYMENT_JSON_PATH" "$contract_id" "$NETWORK" "$SOURCE" "$admin" "$RISC0_VERIFIER_ROUTER_ID" "$PRIVATE_PAYMENTS_POOL_ID" "$STELLAR_ASSET_CONTRACT_ID" "$CCTP_STELLAR_FORWARDER_ID" "$CCTP_STELLAR_FORWARDER_BYTES32" "$IMAGE_ID" "$NETWORK_DOMAIN" <<'NODE'
 const fs = require("fs");
 const [
   path,
@@ -206,7 +205,7 @@ const [
   source,
   admin,
   verifierRouter,
-  poolAdapter,
+  privatePool,
   asset,
   cctpForwarder,
   cctpMintRecipient,
@@ -224,7 +223,7 @@ fs.writeFileSync(
       contracts: {
         nebulaRelay: contractId,
         verifierRouter,
-        poolAdapter,
+        privatePool,
         asset,
         cctpForwarder,
       },

@@ -4432,13 +4432,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nebula-pool-adapter-contract"
-version = "0.1.0"
-dependencies = [
- "soroban-sdk",
-]
-
-[[package]]
 name = "nebula-relay-contract"
 version = "0.1.0"
 dependencies = [

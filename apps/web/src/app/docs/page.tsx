@@ -63,7 +63,7 @@ export default function DocsPage() {
             <Badge tone="warn">Simulated claim UI</Badge>
           </div>
           <p>
-            The UI can still complete with local fallback data for smoke tests.
+            The UI can still complete with local fixture data for smoke tests.
             It does not claim a live Stellar transaction unless contract IDs,
             RPC endpoints, and signer flow are configured.
           </p>
@@ -73,16 +73,15 @@ export default function DocsPage() {
         <Panel title="Private Payments composition" className="span-6">
           <div className="status-row">
             <Badge tone="info">
-              <WalletCards size={14} /> Mode A handoff
+              <WalletCards size={14} /> Private pool proof
             </Badge>
             <Badge tone="danger">Not live bridge finality</Badge>
           </div>
           <p>
-            Stage 8 records a private-note-compatible commitment and adapter
-            handoff. CCTP transaction builders and proof-bound settlement
-            fields are implemented locally, while direct upstream pool credit
-            and a public testnet settlement transcript remain production-path
-            work.
+            NebulaRelay claims through an upstream-compatible Private Payments
+            pool deposit proof. CCTP transaction builders and proof-bound
+            settlement fields are implemented locally, while repeated public
+            testnet settlement transcripts remain production-path work.
           </p>
           <HashRow
             label="Note commitment"

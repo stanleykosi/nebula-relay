@@ -118,8 +118,8 @@ for name in \
   NEBULA_RELAY_CONTRACT_ID \
   NEXT_PUBLIC_NEBULA_RELAY_CONTRACT_ID \
   STELLAR_ASSET_CONTRACT_ID \
-  POOL_ADAPTER_CONTRACT_ID \
-  NEXT_PUBLIC_POOL_ADAPTER_CONTRACT_ID \
+  PRIVATE_PAYMENTS_POOL_ID \
+  NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID \
   STELLAR_SOURCE \
   BOUNDLESS_RPC_URL \
   BOUNDLESS_PRIVATE_KEY \
@@ -134,7 +134,7 @@ expect_same_hex_env RISC0_IMAGE_ID NEBULA_IMAGE_ID
 expect_same_env NEXT_PUBLIC_NEBULA_CCTP_ESCROW_ADDRESS NEBULA_CCTP_ESCROW_ADDRESS
 expect_same_env NEXT_PUBLIC_NEBULA_RELAY_CONTRACT_ID NEBULA_RELAY_CONTRACT_ID
 expect_same_env NEXT_PUBLIC_RISC0_VERIFIER_ROUTER_ID RISC0_VERIFIER_ROUTER_ID
-expect_same_env NEXT_PUBLIC_POOL_ADAPTER_CONTRACT_ID POOL_ADAPTER_CONTRACT_ID
+expect_same_env NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID PRIVATE_PAYMENTS_POOL_ID
 
 if [ "$(normalize_hex "${NEBULA_IMAGE_ID:-}")" = "$DEV_IMAGE_ID" ]; then
   fail "NEBULA_IMAGE_ID is still the old development placeholder; set the real Nebula guest image ID from artifacts/boundless-sdk-quote.json."
@@ -157,7 +157,34 @@ if [ -z "${BOUNDLESS_PROGRAM_URL:-}" ] && [ -z "${PINATA_JWT:-}" ] && [ -z "${S3
   fail "BOUNDLESS_PROGRAM_URL, PINATA_JWT, or S3_BUCKET is required so Boundless provers can fetch the Nebula guest ELF."
 fi
 
-for command in forge cargo pnpm stellar; do
+if [ -n "${CCTP_STELLAR_FORWARDER_HOOK_DATA:-}" ] && [ -n "${NEBULA_RELAY_CONTRACT_ID:-}" ]; then
+  if ! node - "$CCTP_STELLAR_FORWARDER_HOOK_DATA" "$NEBULA_RELAY_CONTRACT_ID" <<'NODE'
+const [hookHex, expected] = process.argv.slice(2);
+const hex = hookHex.replace(/^0x/i, "");
+if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length < 64 || hex.length % 2 !== 0) {
+  console.error("invalid hook hex");
+  process.exit(1);
+}
+const bytes = Buffer.from(hex, "hex");
+const version = bytes.readUInt32BE(24);
+const len = bytes.readUInt32BE(28);
+const end = 32 + len;
+if (version !== 0 || end > bytes.length) {
+  console.error(`invalid hook layout: version=${version} len=${len}`);
+  process.exit(1);
+}
+const recipient = bytes.subarray(32, end).toString("ascii");
+if (recipient !== expected) {
+  console.error(`hook recipient ${recipient} must be NebulaRelay ${expected}`);
+  process.exit(1);
+}
+NODE
+  then
+    fail "CCTP_STELLAR_FORWARDER_HOOK_DATA must use hook version 0 and NebulaRelay as the forward recipient."
+  fi
+fi
+
+for command in forge cargo pnpm stellar node; do
   if ! command -v "$command" >/dev/null 2>&1; then
     fail "$command is not installed or not on PATH."
   fi

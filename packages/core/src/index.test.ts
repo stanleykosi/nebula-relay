@@ -28,7 +28,7 @@ describe("Nebula schemas", () => {
 
   it("validates journal and proof artifact shapes", () => {
     const journal = {
-      version: 1,
+      version: 2,
       domain:
         "0x4e4542554c415f5354454c4c41525f544553544e45545f563100000000000000",
       sourceChainId: 11155111,
@@ -39,6 +39,8 @@ describe("Nebula schemas", () => {
       token: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       amount: "100000000",
       amountBucket: 100,
+      settlementAmount: "99999000",
+      settlementAmountBucket: 99,
       stellarNoteCommitment:
         "0x7777777777777777777777777777777777777777777777777777777777777777",
       complianceRoot:
@@ -60,6 +62,7 @@ describe("Nebula schemas", () => {
         "0xb23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
       cctpMintRecipient:
         "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      cctpFeeExecuted: "1000",
     };
     expect(() => NebulaJournalSchema.parse(journal)).not.toThrow();
     expect(() =>

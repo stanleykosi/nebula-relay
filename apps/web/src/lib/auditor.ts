@@ -10,7 +10,7 @@ export const REQUIRED_AUDITOR_CAVEATS = [
   "User-exported selective disclosure; the user chooses when and where to share it.",
   "This packet is not a production view-key system and does not provide ongoing account surveillance.",
   "Packet does not reveal private keys, note secrets, recipient secrets, or allowlist witness paths.",
-  "Mode A private-note-compatible handoff; no direct upstream pool credit is claimed.",
+  "Private-pool claim requires an upstream Stellar Private Payments deposit proof and stores no visible claimant.",
   "CCTP settlement is proof-bound in the artifact, but this packet is not a legal or security audit.",
 ] as const;
 

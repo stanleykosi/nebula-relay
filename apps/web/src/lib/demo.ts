@@ -29,7 +29,7 @@ export type DemoStepId =
   | "nullifier"
   | "replay"
   | "invalid-token"
-  | "handoff"
+  | "private-pool"
   | "auditor";
 
 export interface DemoStep {
@@ -53,7 +53,7 @@ export interface DemoState {
   nullifierStored: boolean;
   replayFailure?: string;
   invalidTokenFailure?: string;
-  handoffStatus?: string;
+  privatePoolStatus?: string;
   auditorPacket?: AuditorPacket;
   completed: DemoStepId[];
 }
@@ -115,9 +115,9 @@ export const demoSteps: DemoStep[] = [
     caption: "Wrong source token fails before claim.",
   },
   {
-    id: "handoff",
-    title: "Show private note handoff",
-    caption: "Mode A handoff records a private-note-compatible commitment.",
+    id: "private-pool",
+    title: "Show private pool deposit",
+    caption: "Private claim lands in the upstream pool when a deposit proof is supplied.",
   },
   {
     id: "auditor",
@@ -271,14 +271,14 @@ export function runInvalidTokenFailure(state: DemoState): DemoState {
   );
 }
 
-export function showPrivateNoteHandoff(state: DemoState): DemoState {
+export function showPrivatePoolDeposit(state: DemoState): DemoState {
   return completeStep(
     {
       ...state,
-      handoffStatus:
-        "Mode A handoff ready: private-note-compatible commitment recorded; direct pool credit is planned.",
+      privatePoolStatus:
+        "Private pool path ready: NebulaRelay accepts an upstream Private Payments deposit proof and stores no visible claimant.",
     },
-    "handoff"
+    "private-pool"
   );
 }
 
@@ -311,7 +311,7 @@ export function runFullFixtureDemo(): DemoState {
     showNullifierStored,
     runReplayFailure,
     runInvalidTokenFailure,
-    showPrivateNoteHandoff,
+    showPrivatePoolDeposit,
     exportAuditorPacket,
   ].reduce((state, action) => action(state), createInitialDemoState());
 }

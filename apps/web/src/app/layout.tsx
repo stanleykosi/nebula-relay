@@ -33,8 +33,8 @@ export default function RootLayout({
             </header>
             {children}
             <footer className="footer">
-              Relay-first testnet UI. Local fixture fallbacks are labeled
-              wherever they appear.
+              Relay-first testnet UI. Local fixture simulation is labeled
+              wherever it appears.
             </footer>
           </div>
         </Providers>
