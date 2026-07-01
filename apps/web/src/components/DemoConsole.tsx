@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { serializeAuditorPacket } from "@/lib/auditor";
 import { demoConfig } from "@/lib/config";
+import { requestFreighterAddress } from "@/lib/freighter";
 import type { PrivateProverResult } from "@/lib/privateProver";
 import {
   buildFixtureWitness,
@@ -50,16 +51,8 @@ type EthereumProvider = {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
 };
 
-type FreighterLike = {
-  requestAccess?: () => Promise<{
-    address?: string;
-    error?: { message?: string };
-  }>;
-};
-
 type WalletWindow = Window & {
   ethereum?: EthereumProvider;
-  freighterApi?: FreighterLike;
 };
 
 export function DemoConsole() {
@@ -123,26 +116,21 @@ export function DemoConsole() {
   };
 
   const connectStellar = async () => {
-    const freighter = (window as WalletWindow).freighterApi;
-    if (!freighter?.requestAccess) {
+    try {
+      const address = await requestFreighterAddress();
+      setState((current) =>
+        completeStep(
+          {
+            ...current,
+            stellarWallet: address,
+          },
+          "stellar-wallet"
+        )
+      );
+    } catch (caught) {
+      console.warn("Freighter wallet connection failed, using fixture wallet", caught);
       setState((current) => connectFixtureStellarWallet(current));
-      return;
     }
-    const response = await freighter.requestAccess();
-    if (response.error) {
-      throw new Error(response.error.message ?? "Freighter rejected access");
-    }
-    setState((current) =>
-      completeStep(
-        {
-          ...current,
-          stellarWallet:
-            response.address ??
-            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
-        },
-        "stellar-wallet"
-      )
-    );
   };
 
   const downloadAuditorPacket = () => {

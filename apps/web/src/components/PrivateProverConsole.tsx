@@ -18,28 +18,11 @@ import {
   type PrivateProverProgressEvent,
   type PrivateProverResult,
 } from "@/lib/privateProver";
+import {
+  requestFreighterAddress,
+  signFreighterMessage,
+} from "@/lib/freighter";
 import { ActionButton, Badge, HashRow, Panel } from "@/components/ui";
-
-type FreighterSignResult = {
-  signedMessage?: string;
-  signerAddress?: string;
-  error?: { message?: string } | string;
-};
-
-type FreighterApi = {
-  requestAccess?: () => Promise<{
-    address?: string;
-    error?: { message?: string } | string;
-  }>;
-  signMessage?: (
-    message: string,
-    options?: { address?: string; networkPassphrase?: string }
-  ) => Promise<FreighterSignResult>;
-};
-
-type WalletWindow = Window & {
-  freighterApi?: FreighterApi;
-};
 
 type RuntimeResponse<T> = {
   type: "nebula:private-prover:response";
@@ -62,6 +45,7 @@ type RuntimeReadyMessage = {
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (reason: Error) => void;
+  timeout: number;
 };
 
 type RuntimeHealth = {
@@ -137,6 +121,7 @@ export function PrivateProverConsole() {
         return;
       }
       pending.current.delete(data.id);
+      window.clearTimeout(request.timeout);
       if (data.ok) {
         request.resolve(data.result);
       } else {
@@ -161,6 +146,14 @@ export function PrivateProverConsole() {
       pending.current.set(id, {
         resolve: (value) => resolve(value as T),
         reject,
+        timeout: window.setTimeout(() => {
+          pending.current.delete(id);
+          reject(
+            new Error(
+              `Private prover runtime did not respond to ${command}. Check that runtime assets are deployed at ${config.runtimeUrl}.`
+            )
+          );
+        }, 30_000),
       });
     });
     target.postMessage(
@@ -217,41 +210,21 @@ export function PrivateProverConsole() {
 
   const connectStellar = async () =>
     run("Connecting Stellar wallet", async () => {
-      const freighter = (window as WalletWindow).freighterApi;
-      if (!freighter?.requestAccess) {
-        throw new Error("Freighter requestAccess is unavailable");
-      }
-      const response = await freighter.requestAccess();
-      if (response.error) {
-        throw new Error(readFreighterError(response.error));
-      }
-      if (!response.address) {
-        throw new Error("Wallet did not return an address");
-      }
-      setWalletAddress(response.address);
+      const address = await requestFreighterAddress();
+      setWalletAddress(address);
       setStatus("Stellar wallet connected");
     });
 
   const signWithFreighter = async () =>
     run("Signing privacy key seed", async () => {
-      const freighter = (window as WalletWindow).freighterApi;
-      if (!freighter?.signMessage) {
-        throw new Error("Freighter signMessage is unavailable");
-      }
       if (!walletAddress) {
         throw new Error("Connect a Stellar wallet first");
       }
       const message = await sendRuntime<string>("keyDerivationMessage");
-      const response = await freighter.signMessage(message, {
+      const response = await signFreighterMessage(message, {
         address: walletAddress,
         networkPassphrase: config.networkPassphrase,
       });
-      if (response.error) {
-        throw new Error(readFreighterError(response.error));
-      }
-      if (!response.signedMessage) {
-        throw new Error("Wallet did not return a signed message");
-      }
       setSignatureInput(response.signedMessage);
       await deriveKeys(response.signedMessage);
     });
@@ -339,6 +312,12 @@ export function PrivateProverConsole() {
         className="runtime-frame"
         src={config.runtimeUrl}
         title="Nebula private prover runtime"
+        onLoad={() => {
+          setRuntimeReady(true);
+          setStatus((current) =>
+            current === "Runtime waiting" ? "Runtime loaded" : current
+          );
+        }}
       />
 
       <div className="status-row">
@@ -492,8 +471,4 @@ export function PrivateProverConsole() {
       </div>
     </div>
   );
-}
-
-function readFreighterError(error: { message?: string } | string): string {
-  return typeof error === "string" ? error : error.message ?? "Wallet rejected";
 }
