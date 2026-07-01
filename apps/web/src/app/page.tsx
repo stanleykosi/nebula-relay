@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, FileText } from "lucide-react";
+import { ArrowRight, BookOpen, FileText, ShieldCheck } from "lucide-react";
 import { RelayCanvas } from "@/components/RelayCanvas";
 import { ButtonLink, ModeStrip } from "@/components/ui";
 import { demoConfig, implementedVsDemoOnly } from "@/lib/config";
@@ -25,6 +25,9 @@ export default function HomePage() {
             </ButtonLink>
             <ButtonLink href="/failure-lab">
               View failure lab <FileText size={16} />
+            </ButtonLink>
+            <ButtonLink href="/private-prover">
+              Open private prover <ShieldCheck size={16} />
             </ButtonLink>
           </div>
           <ModeStrip config={demoConfig} />

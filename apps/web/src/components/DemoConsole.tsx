@@ -13,9 +13,10 @@ import {
   Wallet,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { serializeAuditorPacket } from "@/lib/auditor";
 import { demoConfig } from "@/lib/config";
+import type { PrivateProverResult } from "@/lib/privateProver";
 import {
   buildFixtureWitness,
   claimFixtureOnStellar,
@@ -71,6 +72,33 @@ export function DemoConsole() {
         : undefined,
     [state.auditorPacket]
   );
+
+  useEffect(() => {
+    function handlePrivateProverMessage(event: MessageEvent<unknown>) {
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+      const data = event.data;
+      if (!isPrivateProverPreparedMessage(data)) {
+        return;
+      }
+      setState((current) =>
+        completeStep(
+          {
+            ...current,
+            noteCommitment: data.result.outputCommitment,
+            privatePoolStatus:
+              "Prepared private-pool proof received from browser prover.",
+          },
+          "note"
+        )
+      );
+    }
+
+    window.addEventListener("message", handlePrivateProverMessage);
+    return () =>
+      window.removeEventListener("message", handlePrivateProverMessage);
+  }, []);
 
   const connectEvm = async () => {
     const provider = (window as WalletWindow).ethereum;
@@ -129,6 +157,10 @@ export function DemoConsole() {
     anchor.download = "nebula-auditor-packet.fixture.json";
     anchor.click();
     URL.revokeObjectURL(url);
+  };
+
+  const openPrivateProver = () => {
+    window.open("/private-prover", "nebula-private-prover");
   };
 
   return (
@@ -220,6 +252,9 @@ export function DemoConsole() {
               }
             >
               <Sparkles size={16} /> Generate note commitment
+            </ActionButton>
+            <ActionButton onClick={openPrivateProver}>
+              <ShieldCheck size={16} /> Open private prover
             </ActionButton>
           </div>
           <HashRow label="Note commitment" value={state.noteCommitment} />
@@ -443,5 +478,24 @@ export function DemoConsole() {
         </Panel>
       </div>
     </div>
+  );
+}
+
+function isPrivateProverPreparedMessage(
+  value: unknown
+): value is {
+  type: "nebula:private-prover:prepared";
+  result: PrivateProverResult;
+} {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as {
+    type?: unknown;
+    result?: { outputCommitment?: unknown };
+  };
+  return (
+    candidate.type === "nebula:private-prover:prepared" &&
+    typeof candidate.result?.outputCommitment === "string"
   );
 }

@@ -462,6 +462,88 @@ code {
   font-size: 0.84rem;
 }
 
+.field {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--ink);
+  outline: none;
+}
+
+.input {
+  min-height: 42px;
+  padding: 9px 10px;
+}
+
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+  padding: 10px;
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: rgba(53, 208, 186, 0.68);
+}
+
+.runtime-frame {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0.01;
+  pointer-events: none;
+}
+
+.asset-list,
+.progress-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.asset-row,
+.progress-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(248, 245, 234, 0.05);
+}
+
+.asset-row span,
+.progress-row span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.asset-row strong,
+.progress-row strong {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
 .footer {
   padding: 24px clamp(18px, 4vw, 56px) 42px;
   border-top: 1px solid var(--line);

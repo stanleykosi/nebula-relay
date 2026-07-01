@@ -120,6 +120,32 @@ Run the full live Sepolia -> Stellar testnet transcript:
 scripts/run_live_testnet_transcript.sh --yes
 ```
 
+Prepare the Stellar Private Payments deposit proof in the hosted browser
+runtime:
+
+```text
+/private-prover
+```
+
+The page loads a patched upstream Stellar Private Payments browser build from
+`apps/web/public/private-prover-runtime`. It keeps note-key derivation and the
+Circom/Groth16 pool proof in the user's browser, exports `PreparedProverTx`
+JSON, and returns the first output commitment to Nebula as the private
+destination binding. The upstream runtime assets are intentionally separate
+from the Next.js bundle; if they are missing, the page reports the exact missing
+asset instead of falling back to a fake proof.
+
+After building the patched upstream browser bundle, stage the static assets for
+Vercel with:
+
+```bash
+bash scripts/stage_private_prover_runtime.sh
+```
+
+The staging script expects an already-built upstream bundle at
+`vendor/stellar-private-payments/app/dist` unless `PRIVATE_PROVER_UPSTREAM_DIST`
+is set. It does not run the heavy Circom/Rust build.
+
 If the upstream Stellar Private Payments testnet deployment does not include a USDC pool, deploy a Nebula-controlled upstream-compatible USDC pool first:
 
 ```bash
@@ -166,6 +192,8 @@ NEXT_PUBLIC_DEMO_MODE=live
 NEXT_PUBLIC_PROOF_MODE=remote
 NEXT_PUBLIC_VERIFIER_MODE=real-router
 NEXT_PUBLIC_STELLAR_NETWORK=testnet
+NEXT_PUBLIC_STELLAR_RPC_URL=
+NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 NEXT_PUBLIC_EVM_NETWORK=sepolia
 NEXT_PUBLIC_EVM_CHAIN_ID=11155111
 NEXT_PUBLIC_CCTP_SETTLEMENT_MODE=testnet
@@ -175,6 +203,9 @@ NEXT_PUBLIC_EVM_MOCK_USDC_ADDRESS=
 NEXT_PUBLIC_NEBULA_RELAY_CONTRACT_ID=
 NEXT_PUBLIC_RISC0_VERIFIER_ROUTER_ID=
 NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID=
+NEXT_PUBLIC_PRIVATE_PROVER_RUNTIME_URL=/private-prover-runtime/nebula-prover-host.html
+NEXT_PUBLIC_PRIVATE_PROVER_ASSET_BASE_URL=/private-prover-runtime
+NEXT_PUBLIC_PRIVATE_PROVER_BOOTNODE_URL=
 ```
 
 Do not add `EVM_PRIVATE_KEY`, `STELLAR_SOURCE_SECRET`, or prover API keys to browser-exposed `NEXT_PUBLIC_*` variables.
@@ -246,7 +277,7 @@ Recorded video and screenshots are not checked into this repo from the terminal 
 
 ## Security Limitations
 
-This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Boundless remote proving, verifier-router validation, CCTP `mint_and_forward` settlement, Nebula claim storage, and replay rejection have been exercised in a live visible-claim testnet transcript. The private-pool claim boundary is implemented and tested, and a Nebula-controlled USDC Private Payments pool is deployed on Stellar testnet. The live privacy script now expects upstream Private Payments `PreparedProverTx` JSON before the EVM burn so the source event binds to the real pool output commitment. A live private-recipient transcript is still pending until that prepared proof output is generated and submitted through `claim_to_private_pool`. Governance hardening, legal review, regulatory review, privacy analysis, and security audits are required before production deployment.
+This repository is unaudited and must not be used with real funds. Public observers should not receive unnecessary transaction history, but the MVP is not production privacy infrastructure. Boundless remote proving, verifier-router validation, CCTP `mint_and_forward` settlement, Nebula claim storage, and replay rejection have been exercised in a live visible-claim testnet transcript. The private-pool claim boundary is implemented and tested, and a Nebula-controlled USDC Private Payments pool is deployed on Stellar testnet. The browser private prover route is implemented as a prepare-only runtime adapter, but it requires patched upstream browser assets staged under `apps/web/public/private-prover-runtime/js` and `apps/web/public/private-prover-runtime/circuits` before it can generate a real `PreparedProverTx` on Vercel. A live private-recipient transcript is still pending until that prepared proof output is generated and submitted through `claim_to_private_pool`. Governance hardening, legal review, regulatory review, privacy analysis, and security audits are required before production deployment.
 
 ## Production Path
 
