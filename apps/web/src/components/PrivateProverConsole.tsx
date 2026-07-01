@@ -66,6 +66,14 @@ type DerivedKeys = {
   aspSecret?: { membershipBlinding?: string };
 };
 
+type AspRegistrationPayload = {
+  address: string;
+  notePublicKey: string;
+  encryptionPublicKey?: string;
+  membershipBlinding: string;
+  membershipLeaf: string;
+};
+
 export function PrivateProverConsole() {
   const config = useMemo(() => privateProverConfig(), []);
   const runtimeOrigin = useMemo(
@@ -88,6 +96,8 @@ export function PrivateProverConsole() {
   const [amount, setAmount] = useState("10000000");
   const [signatureInput, setSignatureInput] = useState("");
   const [derivedKeys, setDerivedKeys] = useState<DerivedKeys>();
+  const [aspRegistration, setAspRegistration] =
+    useState<AspRegistrationPayload>();
   const [preparedResult, setPreparedResult] = useState<PrivateProverResult>();
   const [progress, setProgress] = useState<PrivateProverProgressEvent[]>([]);
   const [status, setStatus] = useState("Runtime waiting");
@@ -243,7 +253,12 @@ export function PrivateProverConsole() {
       address: walletAddress,
       signatureBytes,
     });
+    const registration = await sendRuntime<AspRegistrationPayload>(
+      "aspRegistrationPayload",
+      { address: walletAddress }
+    );
     setDerivedKeys(result);
+    setAspRegistration(registration);
     setStatus("Private note keys ready");
   };
 
@@ -271,6 +286,22 @@ export function PrivateProverConsole() {
       );
       setStatus("PreparedProverTx ready");
     });
+
+  const downloadAspRegistration = () => {
+    if (!aspRegistration) {
+      return;
+    }
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(aspRegistration, null, 2)], {
+        type: "application/json",
+      })
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "nebula-asp-membership-request.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
 
   const downloadPrepared = () => {
     if (!preparedResult) {
@@ -415,6 +446,22 @@ export function PrivateProverConsole() {
             label="Encryption public key"
             value={derivedKeys?.keys?.encryptionKeypair?.public}
           />
+          <HashRow
+            label="ASP membership leaf"
+            value={aspRegistration?.membershipLeaf}
+          />
+          <HashRow
+            label="ASP membership blinding"
+            value={derivedKeys?.aspSecret?.membershipBlinding}
+          />
+          <div className="actions">
+            <ActionButton
+              onClick={downloadAspRegistration}
+              disabled={!aspRegistration}
+            >
+              <Download size={16} /> Export ASP request
+            </ActionButton>
+          </div>
         </Panel>
 
         <Panel title="3. Prepare pool proof" className="span-7">

@@ -61,6 +61,37 @@ describe("private prover helpers", () => {
     expect(extractOutputCommitment(prepared)).toBe("123");
   });
 
+  it("extracts the commitment from upstream snake_case prepared outputs", () => {
+    expect(
+      extractOutputCommitment({
+        proof_uncompressed: [],
+        ext_data: {},
+        prepared: {
+          output_commitments: ["0xabc", "0xdef"],
+        },
+      })
+    ).toBe("0xabc");
+  });
+
+  it("extracts the commitment from individual prepared output fields", () => {
+    expect(
+      extractOutputCommitment({
+        proofUncompressed: [],
+        extData: {},
+        prepared: {
+          output_commitment0: "0x123",
+          output_commitment1: "0x456",
+        },
+      })
+    ).toBe("0x123");
+  });
+
+  it("reports ASP registration when upstream returns null", () => {
+    expect(() => extractOutputCommitment(null)).toThrow(
+      "not registered in the ASP membership tree"
+    );
+  });
+
   it("decodes Freighter base64 and manual hex signatures", () => {
     expect(decodeSignatureBytes("AQID")).toEqual([1, 2, 3]);
     expect(decodeSignatureBytes("0x010203")).toEqual([1, 2, 3]);

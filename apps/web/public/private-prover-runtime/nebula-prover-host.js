@@ -37,6 +37,9 @@ async function handleRequest(message, event) {
       case "deriveKeys":
         result = await deriveKeys(payload);
         break;
+      case "aspRegistrationPayload":
+        result = await aspRegistrationPayload(payload);
+        break;
       case "prepareDeposit":
         result = await prepareDeposit(id, payload);
         break;
@@ -153,10 +156,7 @@ async function prepareDeposit(requestId, payload) {
     }
   );
 
-  const outputCommitment = preparedProverTx?.prepared?.outputCommitments?.[0];
-  if (!outputCommitment) {
-    throw new Error("PreparedProverTx did not include outputCommitments[0]");
-  }
+  const outputCommitment = extractOutputCommitment(preparedProverTx);
 
   return {
     preparedProverTx,
@@ -165,6 +165,53 @@ async function prepareDeposit(requestId, payload) {
     poolId,
     generatedAt: new Date().toISOString(),
   };
+}
+
+async function aspRegistrationPayload(payload) {
+  const client = clientOrThrow();
+  const address = requireString(payload?.address, "address");
+  const keys = await client.getUserKeys(address);
+  const aspSecret = await client.getASPSecret(address);
+  const notePublicKey = keys?.noteKeypair?.public;
+  const encryptionPublicKey = keys?.encryptionKeypair?.public;
+  const membershipBlinding = aspSecret?.membershipBlinding;
+  if (!notePublicKey || !membershipBlinding) {
+    throw new Error("Private note keys and ASP secret must be derived before ASP registration payload export");
+  }
+  const membershipLeaf = await client.deriveAspUserLeaf(
+    BigInt(membershipBlinding),
+    notePublicKey
+  );
+  return {
+    address,
+    notePublicKey,
+    encryptionPublicKey,
+    membershipBlinding,
+    membershipLeaf,
+  };
+}
+
+function extractOutputCommitment(preparedProverTx) {
+  if (preparedProverTx === null) {
+    throw new Error(
+      "Private Payments returned no PreparedProverTx because this wallet is not registered in the ASP membership tree yet. Register the ASP membership leaf for this note, wait for indexing, then run Prepare proof again."
+    );
+  }
+  const publicInputs =
+    preparedProverTx?.prepared ??
+    preparedProverTx?.public ??
+    preparedProverTx?.publicInputs;
+  const outputCommitments =
+    publicInputs?.outputCommitments ?? publicInputs?.output_commitments;
+  const outputCommitment = Array.isArray(outputCommitments)
+    ? outputCommitments[0]
+    : publicInputs?.outputCommitment0 ?? publicInputs?.output_commitment0;
+  if (typeof outputCommitment !== "string" || outputCommitment.trim() === "") {
+    throw new Error(
+      "PreparedProverTx is missing the first output commitment; checked prepared.outputCommitments[0], prepared.output_commitments[0], outputCommitment0, and output_commitment0."
+    );
+  }
+  return outputCommitment;
 }
 
 function clientOrThrow() {

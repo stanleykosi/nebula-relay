@@ -28,17 +28,31 @@ export interface PrivateProverPreparedPublic {
   poolRoot?: string;
   inputNullifiers?: string[];
   outputCommitments?: string[];
+  output_commitments?: string[];
+  outputCommitment0?: string;
+  output_commitment0?: string;
+  outputCommitment1?: string;
+  output_commitment1?: string;
   publicAmount?: string;
+  public_amount?: string;
   extDataHashBe?: number[] | string;
+  ext_data_hash_be?: number[] | string;
   aspMembershipRoot?: string;
+  asp_membership_root?: string;
   aspNonMembershipRoot?: string;
+  asp_non_membership_root?: string;
 }
 
 export interface PreparedProverTx {
-  proofUncompressed: number[];
+  proofUncompressed?: number[];
+  proof_uncompressed?: number[];
   extData: unknown;
-  prepared: PrivateProverPreparedPublic;
+  ext_data?: unknown;
+  prepared?: PrivateProverPreparedPublic;
+  public?: PrivateProverPreparedPublic;
+  publicInputs?: PrivateProverPreparedPublic;
   sorobanTx?: unknown;
+  soroban_tx?: unknown;
 }
 
 export interface PrivateProverResult {
@@ -112,10 +126,29 @@ export async function checkPrivateProverAssets(
   );
 }
 
-export function extractOutputCommitment(prepared: PreparedProverTx): string {
-  const commitment = prepared.prepared.outputCommitments?.[0];
-  if (!commitment) {
-    throw new Error("PreparedProverTx is missing outputCommitments[0]");
+export function extractOutputCommitment(prepared: unknown): string {
+  if (prepared === null) {
+    throw new Error(
+      "Private Payments returned no PreparedProverTx. The wallet is not registered in the ASP membership tree yet."
+    );
+  }
+  const record = asRecord(prepared, "PreparedProverTx");
+  const publicInputs = asRecord(
+    getFirst(record, ["prepared", "public", "publicInputs"]),
+    "PreparedProverTx public inputs"
+  );
+  const outputCommitments = getOptional(publicInputs, [
+    "outputCommitments",
+    "output_commitments",
+  ]);
+  const commitment = getOptional(publicInputs, [
+    "outputCommitment0",
+    "output_commitment0",
+  ]) ?? arrayItem(outputCommitments, 0);
+  if (typeof commitment !== "string" || commitment.trim() === "") {
+    throw new Error(
+      "PreparedProverTx is missing the first output commitment; checked prepared.outputCommitments[0], prepared.output_commitments[0], outputCommitment0, and output_commitment0."
+    );
   }
   return commitment;
 }
@@ -154,4 +187,38 @@ function readOptionalEnv(value: string | undefined): string | undefined {
 function readRequiredPublicEnv(value: string | undefined): string {
   const trimmed = value?.trim() ?? "";
   return trimmed && trimmed !== "TBD" ? trimmed : "";
+}
+
+function asRecord(value: unknown, name: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${name} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function getFirst(
+  record: Record<string, unknown>,
+  keys: readonly string[]
+): unknown {
+  const value = getOptional(record, keys);
+  if (value === undefined) {
+    throw new Error(`${keys[0]} is required`);
+  }
+  return value;
+}
+
+function getOptional(
+  record: Record<string, unknown>,
+  keys: readonly string[]
+): unknown {
+  for (const key of keys) {
+    if (record[key] !== undefined) {
+      return record[key];
+    }
+  }
+  return undefined;
+}
+
+function arrayItem(value: unknown, index: number): unknown {
+  return Array.isArray(value) ? value[index] : undefined;
 }
