@@ -1,43 +1,41 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { RadioTower } from "lucide-react";
+import { Geist, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { ProductShell } from "@/components/nebula/ProductShell";
 
 export const metadata: Metadata = {
   title: "Nebula Relay",
   description:
-    "ZK relay for proof-gated private Stellar payment notes from EVM lock events.",
+    "A proof-backed privacy bridge for moving USDC from EVM into Stellar private pools.",
 };
+
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+});
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html
+      className={`${geist.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
+      lang="en"
+    >
       <body>
         <Providers>
-          <div className="app-shell">
-            <header className="topbar">
-              <Link className="brand" href="/">
-                <span className="brand-mark" aria-hidden="true">
-                  <RadioTower size={17} />
-                </span>
-                <span>Nebula Relay</span>
-              </Link>
-              <nav className="nav" aria-label="Main navigation">
-                <Link href="/demo">Demo</Link>
-                <Link href="/private-prover">Private Prover</Link>
-                <Link href="/failure-lab">Failure Lab</Link>
-                <Link href="/docs">Docs</Link>
-              </nav>
-            </header>
-            {children}
-            <footer className="footer">
-              Relay-first testnet UI. Local fixture simulation is labeled
-              wherever it appears.
-            </footer>
-          </div>
+          <ProductShell>{children}</ProductShell>
         </Providers>
       </body>
     </html>

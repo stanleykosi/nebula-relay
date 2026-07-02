@@ -18,6 +18,13 @@ export async function fetchSourceReceipt(
     transport: http(config.sepoliaRpcUrl),
   });
   const receipt = await client.getTransactionReceipt({ hash: txHash });
+  if (receipt.status !== "success") {
+    throw new ApiError(
+      422,
+      "source_transaction_reverted",
+      `source transaction ${txHash} was mined with status ${receipt.status}`
+    );
+  }
   return jsonSafe(receipt) as Record<string, unknown>;
 }
 

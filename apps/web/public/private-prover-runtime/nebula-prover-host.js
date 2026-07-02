@@ -13,7 +13,11 @@ postReady();
 
 window.addEventListener("message", (event) => {
   const message = event.data;
-  if (!message || message.type !== REQUEST_TYPE || typeof message.id !== "string") {
+  if (
+    !message ||
+    message.type !== REQUEST_TYPE ||
+    typeof message.id !== "string"
+  ) {
     return;
   }
 
@@ -42,6 +46,15 @@ async function handleRequest(message, event) {
         break;
       case "prepareDeposit":
         result = await prepareDeposit(id, payload);
+        break;
+      case "quoteWithdrawFee":
+        result = await quoteWithdrawFee(payload);
+        break;
+      case "getUserNotes":
+        result = await getUserNotes(payload);
+        break;
+      case "recoverNoteState":
+        result = await recoverNoteState(id, payload);
         break;
       case "executeWithdraw":
         result = await executeWithdraw(id, payload);
@@ -73,12 +86,15 @@ async function checkHealth() {
   const checks = await Promise.all(
     assets.map(async ([name, path]) => {
       try {
-        const response = await fetch(path, { method: "HEAD", cache: "no-store" });
+        const response = await fetch(path, {
+          method: "HEAD",
+          cache: "no-store",
+        });
         return { name, path, ok: response.ok, status: response.status };
       } catch {
         return { name, path, ok: false };
       }
-    })
+    }),
   );
   return {
     ok: checks.every((check) => check.ok),
@@ -95,7 +111,10 @@ async function initialize(payload) {
   const client = clientOrThrow();
   const methods = {
     prepareDeposit: typeof client.prepareDeposit === "function",
+    plan: typeof client.plan === "function",
     executeWithdraw: typeof client.executeWithdraw === "function",
+    getUserNotes: typeof client.getUserNotes === "function",
+    recoverNoteState: typeof client.getUserNotes === "function",
     deriveAndSaveUserKeys: typeof client.deriveAndSaveUserKeys === "function",
     getUserKeys: typeof client.getUserKeys === "function",
     getASPSecret: typeof client.getASPSecret === "function",
@@ -132,7 +151,7 @@ async function prepareDeposit(requestId, payload) {
   const client = clientOrThrow();
   if (typeof client.prepareDeposit !== "function") {
     throw new Error(
-      "Hosted Stellar Private Payments WASM is missing prepareDeposit. Apply patches/stellar-private-payments/browser-prepare-only.patch before staging runtime assets."
+      "Hosted Stellar Private Payments WASM is missing prepareDeposit. Apply patches/stellar-private-payments/browser-prepare-only.patch before staging runtime assets.",
     );
   }
 
@@ -155,9 +174,9 @@ async function prepareDeposit(requestId, payload) {
           id: requestId,
           progress: toPlain(progress),
         },
-        window.location.origin
+        window.location.origin,
       );
-    }
+    },
   );
 
   const outputCommitment = extractOutputCommitment(preparedProverTx);
@@ -171,11 +190,164 @@ async function prepareDeposit(requestId, payload) {
   };
 }
 
+async function quoteWithdrawFee(payload) {
+  const client = clientOrThrow();
+  if (typeof client.plan !== "function") {
+    return {
+      source: "base-estimate",
+      stepCount: 1,
+    };
+  }
+
+  const poolId = requireString(payload?.poolId, "poolId");
+  const address = requireString(payload?.address, "address");
+  const amount = requireString(payload?.amount, "amount");
+  const preview = toPlain(await client.plan(poolId, address, BigInt(amount)));
+  return {
+    source: "runtime-plan",
+    stepCount: normalizeStepCount(
+      preview?.stepCount ?? preview?.step_count ?? preview?.steps,
+    ),
+    preview,
+  };
+}
+
+async function getUserNotes(payload) {
+  const client = clientOrThrow();
+  if (typeof client.getUserNotes !== "function") {
+    return {
+      available: false,
+      notes: [],
+      count: 0,
+    };
+  }
+  const address = requireString(payload?.address, "address");
+  const limit = normalizeStepCount(payload?.limit ?? 25);
+  const notes = toPlain(await client.getUserNotes(address, limit));
+  return {
+    available: true,
+    notes,
+    count: Array.isArray(notes) ? notes.length : 0,
+  };
+}
+
+async function recoverNoteState(requestId, payload) {
+  const client = clientOrThrow();
+  const timeoutMs = normalizeDuration(
+    payload?.timeoutMs,
+    90_000,
+    5_000,
+    180_000,
+  );
+  if (typeof client.getUserNotes !== "function") {
+    return {
+      available: false,
+      recovered: false,
+      spendable: false,
+      recognized: false,
+      notes: [],
+      count: 0,
+      attempts: 0,
+      elapsedMs: 0,
+      timeoutMs,
+      lastError:
+        "Hosted Stellar Private Payments WASM is missing getUserNotes.",
+    };
+  }
+
+  const address = requireString(payload?.address, "address");
+  const target = {
+    noteCommitment: requireString(payload?.noteCommitment, "noteCommitment"),
+    poolId: optionalString(payload?.poolId),
+    amount: optionalString(payload?.amount),
+  };
+  const limit = normalizePositiveInteger(payload?.limit, 50, 1, 100);
+  const pollIntervalMs = normalizeDuration(
+    payload?.pollIntervalMs,
+    1_500,
+    250,
+    10_000,
+  );
+  const startedAt = Date.now();
+  let attempts = 0;
+  let lastError;
+  let latestNotes = [];
+  let latestMatch = {
+    spendable: false,
+    count: 0,
+    recognized: false,
+  };
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    attempts += 1;
+    postProgress(
+      requestId,
+      "note_recovery",
+      "scan_local_notes",
+      `Checking indexed private notes for the target commitment (attempt ${attempts}).`,
+    );
+
+    try {
+      latestNotes = toPlain(await client.getUserNotes(address, limit));
+      latestMatch = findSpendableNote(latestNotes, target);
+
+      if (latestMatch.spendable) {
+        postProgress(
+          requestId,
+          "note_recovery",
+          "recovered",
+          "Spendable private note state recovered for this browser.",
+        );
+        return {
+          available: true,
+          recovered: true,
+          notes: latestNotes,
+          attempts,
+          elapsedMs: Date.now() - startedAt,
+          timeoutMs,
+          recoveredAt: new Date().toISOString(),
+          ...latestMatch,
+        };
+      }
+
+      postProgress(
+        requestId,
+        "note_recovery",
+        "sync_wait",
+        latestMatch.recognized
+          ? `Private notes are indexed, but the target commitment is not spendable yet (${latestMatch.count} unspent indexed).`
+          : `Waiting for the private pool indexer to recognize the restored commitment (${latestMatch.count} unspent indexed).`,
+      );
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      postProgress(
+        requestId,
+        "note_recovery",
+        "sync_retry",
+        `Private note recovery is still syncing: ${lastError}`,
+      );
+    }
+
+    await sleep(pollIntervalMs);
+  }
+
+  return {
+    available: true,
+    recovered: false,
+    notes: latestNotes,
+    attempts,
+    elapsedMs: Date.now() - startedAt,
+    timeoutMs,
+    lastError,
+    ...latestMatch,
+  };
+}
+
 async function executeWithdraw(requestId, payload) {
   const client = clientOrThrow();
   if (typeof client.executeWithdraw !== "function") {
     throw new Error(
-      "Hosted Stellar Private Payments WASM is missing executeWithdraw. Stage a runtime build that exposes withdraw support before enabling private pool withdrawals."
+      "Hosted Stellar Private Payments WASM is missing executeWithdraw. Stage a runtime build that exposes withdraw support before enabling private pool withdrawals.",
     );
   }
 
@@ -183,12 +355,12 @@ async function executeWithdraw(requestId, payload) {
   const address = requireString(payload?.address, "address");
   const withdrawRecipient = requireString(
     payload?.withdrawRecipient,
-    "withdrawRecipient"
+    "withdrawRecipient",
   );
   const amount = requireString(payload?.amount, "amount");
   const networkPassphrase = requireString(
     payload?.networkPassphrase,
-    "networkPassphrase"
+    "networkPassphrase",
   );
 
   const result = await client.executeWithdraw(
@@ -204,9 +376,9 @@ async function executeWithdraw(requestId, payload) {
           id: requestId,
           progress: toPlain(progress),
         },
-        window.location.origin
+        window.location.origin,
       );
-    }
+    },
   );
 
   const plain = toPlain(result);
@@ -236,11 +408,13 @@ async function aspRegistrationPayload(payload) {
   const encryptionPublicKey = keys?.encryptionKeypair?.public;
   const membershipBlinding = aspSecret?.membershipBlinding;
   if (!notePublicKey || !membershipBlinding) {
-    throw new Error("Private note keys and ASP secret must be derived before ASP registration payload export");
+    throw new Error(
+      "Private note keys and ASP secret must be derived before ASP registration payload export",
+    );
   }
   const membershipLeaf = await client.deriveAspUserLeaf(
     BigInt(membershipBlinding),
-    notePublicKey
+    notePublicKey,
   );
   return {
     address,
@@ -254,7 +428,7 @@ async function aspRegistrationPayload(payload) {
 function extractOutputCommitment(preparedProverTx) {
   if (preparedProverTx === null) {
     throw new Error(
-      "Private Payments returned no PreparedProverTx because this wallet is not registered in the ASP membership tree yet. Register the ASP membership leaf for this note, wait for indexing, then run Prepare proof again."
+      "Private Payments returned no PreparedProverTx because this wallet is not registered in the ASP membership tree yet. Register the ASP membership leaf for this note, wait for indexing, then run Prepare proof again.",
     );
   }
   const publicInputs =
@@ -265,10 +439,10 @@ function extractOutputCommitment(preparedProverTx) {
     publicInputs?.outputCommitments ?? publicInputs?.output_commitments;
   const outputCommitment = Array.isArray(outputCommitments)
     ? outputCommitments[0]
-    : publicInputs?.outputCommitment0 ?? publicInputs?.output_commitment0;
+    : (publicInputs?.outputCommitment0 ?? publicInputs?.output_commitment0);
   if (typeof outputCommitment !== "string" || outputCommitment.trim() === "") {
     throw new Error(
-      "PreparedProverTx is missing the first output commitment; checked prepared.outputCommitments[0], prepared.output_commitments[0], outputCommitment0, and output_commitment0."
+      "PreparedProverTx is missing the first output commitment; checked prepared.outputCommitments[0], prepared.output_commitments[0], outputCommitment0, and output_commitment0.",
     );
   }
   return outputCommitment;
@@ -289,12 +463,23 @@ function reply(event, id, payload) {
       id,
       ...payload,
     },
-    event.origin
+    event.origin,
   );
 }
 
 function postReady() {
   window.parent.postMessage({ type: READY_TYPE }, window.location.origin);
+}
+
+function postProgress(requestId, flow, stage, message) {
+  window.parent.postMessage(
+    {
+      type: PROGRESS_TYPE,
+      id: requestId,
+      progress: { flow, stage, message },
+    },
+    window.location.origin,
+  );
 }
 
 function requireString(value, name) {
@@ -327,6 +512,98 @@ function findStringValue(value, keys) {
   return undefined;
 }
 
+function normalizeStepCount(value) {
+  return Number.isSafeInteger(value) && value > 0 ? Math.min(value, 100) : 1;
+}
+
+function normalizePositiveInteger(value, fallback, min, max) {
+  if (Number.isSafeInteger(value)) {
+    return Math.min(Math.max(value, min), max);
+  }
+  if (typeof value === "string" && /^[0-9]+$/.test(value)) {
+    return Math.min(Math.max(Number(value), min), max);
+  }
+  return fallback;
+}
+
+function normalizeDuration(value, fallback, min, max) {
+  return normalizePositiveInteger(value, fallback, min, max);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function findSpendableNote(notes, target) {
+  if (!Array.isArray(notes)) {
+    return { spendable: false, count: 0, recognized: false };
+  }
+
+  const expectedCommitment = normalizeHex(target.noteCommitment);
+  let recognized = false;
+  let count = 0;
+
+  for (const note of notes) {
+    if (!note || typeof note !== "object" || Array.isArray(note)) {
+      continue;
+    }
+    const spent = note.spent === true;
+    if (!spent) {
+      count += 1;
+    }
+    const commitment = readString(note, [
+      "id",
+      "commitment",
+      "noteCommitment",
+      "note_commitment",
+    ]);
+    if (!commitment) {
+      continue;
+    }
+    recognized = true;
+    const pool = readString(note, [
+      "poolContractId",
+      "pool_contract_id",
+      "poolId",
+      "pool_id",
+    ]);
+    const amount = readString(note, ["amount", "value"]);
+
+    if (
+      !spent &&
+      normalizeHex(commitment) === expectedCommitment &&
+      (!pool || !target.poolId || pool === target.poolId) &&
+      (!amount || !target.amount || amount === target.amount)
+    ) {
+      return {
+        spendable: true,
+        count,
+        recognized,
+        matchedNote: note,
+      };
+    }
+  }
+
+  return { spendable: false, count, recognized };
+}
+
+function readString(record, keys) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim() !== "") {
+      return value;
+    }
+    if (typeof value === "number" || typeof value === "bigint") {
+      return String(value);
+    }
+  }
+  return null;
+}
+
+function normalizeHex(value) {
+  return value.toLowerCase().replace(/^0x/, "");
+}
+
 function toPlain(value) {
   if (typeof value === "bigint") {
     return value.toString();
@@ -339,7 +616,7 @@ function toPlain(value) {
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, toPlain(entry)])
+      Object.entries(value).map(([key, entry]) => [key, toPlain(entry)]),
     );
   }
   return value;

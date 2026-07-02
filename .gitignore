@@ -40,6 +40,7 @@ nebula-private-pool-prepared.json
 *:Zone.Identifier
 .vscode/
 .idea/
+.codex/
 
 # Foundry
 contracts/evm/cache/
@@ -52,3 +53,4 @@ contracts/stellar/**/test_snapshots/
 # Logs
 *.log
 *.tsbuildinfo
+/stitch_nebula_relay_product_design_system

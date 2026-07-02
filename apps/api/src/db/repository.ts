@@ -2,9 +2,11 @@ import type { Pool, QueryResultRow } from "pg";
 import type {
   BridgeEventRecord,
   BridgeIntentRecord,
+  BridgeNoteBackupRecord,
   BridgeStatus,
   CreateIntentInput,
   IntentPatch,
+  UpsertNoteBackupInput,
 } from "../types.js";
 
 const PROCESSABLE_STATUSES: BridgeStatus[] = [
@@ -18,6 +20,12 @@ const PROCESSABLE_STATUSES: BridgeStatus[] = [
   "claiming",
   "claimed",
 ];
+
+export interface ListIntentsInput {
+  stellarAccount?: string;
+  ids?: string[];
+  limit?: number;
+}
 
 export class BridgeRepository {
   constructor(private readonly pg: Pool) {}
@@ -70,6 +78,40 @@ export class BridgeRepository {
       [id]
     );
     return result.rows[0] ? mapIntent(result.rows[0]) : null;
+  }
+
+  async listIntents(input: ListIntentsInput): Promise<BridgeIntentRecord[]> {
+    const ids = Array.from(new Set(input.ids ?? []));
+    const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+    const where: string[] = [];
+    const values: unknown[] = [];
+
+    if (input.stellarAccount) {
+      values.push(input.stellarAccount);
+      where.push(`stellar_account = $${values.length}`);
+    }
+
+    if (ids.length > 0) {
+      values.push(ids);
+      where.push(`id = ANY($${values.length}::uuid[])`);
+    }
+
+    if (where.length === 0) {
+      return [];
+    }
+
+    values.push(limit);
+    const result = await this.pg.query(
+      `
+      SELECT *
+      FROM bridge_intents
+      WHERE ${where.join(" AND ")}
+      ORDER BY updated_at DESC
+      LIMIT $${values.length}
+      `,
+      values
+    );
+    return result.rows.map(mapIntent);
   }
 
   async attachSourceTx(id: string, txHash: string): Promise<BridgeIntentRecord> {
@@ -218,6 +260,61 @@ export class BridgeRepository {
     );
     return result.rows.map(mapEvent);
   }
+
+  async upsertNoteBackup(
+    input: UpsertNoteBackupInput
+  ): Promise<BridgeNoteBackupRecord> {
+    const result = await this.pg.query(
+      `
+      INSERT INTO bridge_note_backups (
+        intent_id,
+        stellar_account,
+        note_commitment,
+        pool_id,
+        backup_format,
+        schema_version,
+        kdf_version,
+        salt,
+        iv,
+        ciphertext
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ON CONFLICT (intent_id)
+      DO NOTHING
+      RETURNING *
+      `,
+      [
+        input.intentId,
+        input.stellarAccount,
+        input.noteCommitment,
+        input.poolId,
+        input.backupFormat,
+        input.schemaVersion,
+        input.kdfVersion,
+        input.salt,
+        input.iv,
+        input.ciphertext,
+      ]
+    );
+    if (result.rows[0]) {
+      return mapNoteBackup(result.rows[0]);
+    }
+    const existing = await this.getNoteBackup(input.intentId);
+    if (!existing) {
+      throw new Error(`note backup insert conflict without existing row: ${input.intentId}`);
+    }
+    return existing;
+  }
+
+  async getNoteBackup(
+    intentId: string
+  ): Promise<BridgeNoteBackupRecord | null> {
+    const result = await this.pg.query(
+      "SELECT * FROM bridge_note_backups WHERE intent_id = $1",
+      [intentId]
+    );
+    return result.rows[0] ? mapNoteBackup(result.rows[0]) : null;
+  }
 }
 
 function mapIntent(row: QueryResultRow): BridgeIntentRecord {
@@ -257,6 +354,23 @@ function mapEvent(row: QueryResultRow): BridgeEventRecord {
     eventType: String(row.event_type),
     payload: row.payload ?? {},
     createdAt: toIso(row.created_at),
+  };
+}
+
+function mapNoteBackup(row: QueryResultRow): BridgeNoteBackupRecord {
+  return {
+    intentId: String(row.intent_id),
+    stellarAccount: String(row.stellar_account),
+    noteCommitment: String(row.note_commitment) as BridgeNoteBackupRecord["noteCommitment"],
+    poolId: String(row.pool_id),
+    backupFormat: "nebula.note.backup.v1",
+    schemaVersion: 1,
+    kdfVersion: "freighter-signature-hkdf-sha256-aes-256-gcm-v1",
+    salt: String(row.salt),
+    iv: String(row.iv),
+    ciphertext: String(row.ciphertext),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
   };
 }
 

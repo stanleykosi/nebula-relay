@@ -131,6 +131,21 @@ export interface BridgeEventRecord {
   createdAt: string;
 }
 
+export interface BridgeNoteBackupRecord {
+  intentId: string;
+  stellarAccount: string;
+  noteCommitment: Hex;
+  poolId: string;
+  backupFormat: "nebula.note.backup.v1";
+  schemaVersion: 1;
+  kdfVersion: "freighter-signature-hkdf-sha256-aes-256-gcm-v1";
+  salt: string;
+  iv: string;
+  ciphertext: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CreateIntentInput {
   id: string;
   stellarAccount: string | null;
@@ -156,4 +171,17 @@ export interface IntentPatch {
   replayChecked?: boolean;
   lastError?: string | null;
   claimedAt?: string | null;
+}
+
+export interface UpsertNoteBackupInput {
+  intentId: string;
+  stellarAccount: string;
+  noteCommitment: Hex;
+  poolId: string;
+  backupFormat: "nebula.note.backup.v1";
+  schemaVersion: 1;
+  kdfVersion: "freighter-signature-hkdf-sha256-aes-256-gcm-v1";
+  salt: string;
+  iv: string;
+  ciphertext: string;
 }

@@ -22,6 +22,7 @@ export interface PrivateProverConfig {
   bootnodeUrl?: string;
   networkPassphrase: string;
   poolId: string;
+  withdrawResourceFeeEstimateStroops: string;
 }
 
 export interface PrivateProverPreparedPublic {
@@ -68,10 +69,50 @@ export interface PrivateProverWithdrawResult {
   ownerAddress: string;
   withdrawRecipient: string;
   amount: string;
+  feeEstimate?: StellarWithdrawFeeEstimate;
   status?: string;
   txHash?: string;
   result: unknown;
   submittedAt: string;
+}
+
+export interface PrivateNoteRecoveryTarget {
+  noteCommitment: string;
+  poolId?: string;
+  amount?: string;
+}
+
+export interface PrivateNoteRecoveryMatch {
+  spendable: boolean;
+  count: number;
+  recognized: boolean;
+  matchedNote?: Record<string, unknown>;
+}
+
+export interface PrivateNoteRecoveryResult extends PrivateNoteRecoveryMatch {
+  available: boolean;
+  recovered: boolean;
+  notes: unknown;
+  attempts: number;
+  elapsedMs: number;
+  timeoutMs: number;
+  lastError?: string;
+  recoveredAt?: string;
+}
+
+export type StellarWithdrawFeeSource =
+  "runtime-plan-estimate" | "base-estimate";
+
+export interface StellarWithdrawFeeEstimate {
+  asset: "XLM";
+  source: StellarWithdrawFeeSource;
+  stepCount: number;
+  inclusionFeeStroops: string;
+  resourceFeeStroops: string;
+  totalFeeStroops: string;
+  totalFeeXlm: string;
+  estimatedAt: string;
+  detail: string;
 }
 
 export interface PrivateProverProgressEvent {
@@ -83,6 +124,9 @@ export interface PrivateProverProgressEvent {
 const DEFAULT_RUNTIME_URL = "/private-prover-runtime/nebula-prover-host.html";
 const DEFAULT_ASSET_BASE_URL = "/private-prover-runtime";
 const DEFAULT_TESTNET_PASSPHRASE = "Test SDF Network ; September 2015";
+const DEFAULT_WITHDRAW_RESOURCE_FEE_ESTIMATE_STROOPS = "100000";
+const STELLAR_BASE_FEE_STROOPS = BigInt(100);
+const STROOPS_PER_XLM = BigInt(10_000_000);
 
 export function privateProverConfig(): PrivateProverConfig {
   const assetBaseUrl =
@@ -91,14 +135,21 @@ export function privateProverConfig(): PrivateProverConfig {
   return {
     assetBaseUrl: normalizeBaseUrl(assetBaseUrl),
     runtimeUrl:
-      process.env.NEXT_PUBLIC_PRIVATE_PROVER_RUNTIME_URL ??
-      DEFAULT_RUNTIME_URL,
+      process.env.NEXT_PUBLIC_PRIVATE_PROVER_RUNTIME_URL ?? DEFAULT_RUNTIME_URL,
     stellarRpcUrl: process.env.NEXT_PUBLIC_STELLAR_RPC_URL ?? "",
-    bootnodeUrl: readOptionalEnv(process.env.NEXT_PUBLIC_PRIVATE_PROVER_BOOTNODE_URL),
+    bootnodeUrl: readOptionalEnv(
+      process.env.NEXT_PUBLIC_PRIVATE_PROVER_BOOTNODE_URL,
+    ),
     networkPassphrase:
       process.env.NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE ??
       DEFAULT_TESTNET_PASSPHRASE,
-    poolId: readRequiredPublicEnv(process.env.NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID),
+    poolId: readRequiredPublicEnv(
+      process.env.NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID,
+    ),
+    withdrawResourceFeeEstimateStroops: readPositiveIntegerEnv(
+      process.env.NEXT_PUBLIC_STELLAR_WITHDRAW_RESOURCE_FEE_ESTIMATE_STROOPS,
+      DEFAULT_WITHDRAW_RESOURCE_FEE_ESTIMATE_STROOPS,
+    ),
   };
 }
 
@@ -111,54 +162,50 @@ export function privateProverAssetPaths(assetBaseUrl: string) {
     asset("prover-worker", `${base}/js/prover-worker.js`),
     asset("policy-wasm", `${base}/circuits/policy_tx_2_2.wasm`),
     asset("policy-r1cs", `${base}/circuits/policy_tx_2_2.r1cs`),
-    asset(
-      "disclosure-wasm",
-      `${base}/circuits/selectiveDisclosure_1.wasm`
-    ),
-    asset(
-      "disclosure-r1cs",
-      `${base}/circuits/selectiveDisclosure_1.r1cs`
-    ),
+    asset("disclosure-wasm", `${base}/circuits/selectiveDisclosure_1.wasm`),
+    asset("disclosure-r1cs", `${base}/circuits/selectiveDisclosure_1.r1cs`),
   ] satisfies Array<{ name: PrivateProverAssetName; path: string }>;
 }
 
 export async function checkPrivateProverAssets(
-  assetBaseUrl: string
+  assetBaseUrl: string,
 ): Promise<PrivateProverAssetStatus[]> {
   return Promise.all(
     privateProverAssetPaths(assetBaseUrl).map(async ({ name, path }) => {
       try {
-        const response = await fetch(path, { method: "HEAD", cache: "no-store" });
+        const response = await fetch(path, {
+          method: "HEAD",
+          cache: "no-store",
+        });
         return { name, path, ok: response.ok, status: response.status };
       } catch {
         return { name, path, ok: false };
       }
-    })
+    }),
   );
 }
 
 export function extractOutputCommitment(prepared: unknown): string {
   if (prepared === null) {
     throw new Error(
-      "Private Payments returned no PreparedProverTx. The wallet is not registered in the ASP membership tree yet."
+      "Private Payments returned no PreparedProverTx. The wallet is not registered in the ASP membership tree yet.",
     );
   }
   const record = asRecord(prepared, "PreparedProverTx");
   const publicInputs = asRecord(
     getFirst(record, ["prepared", "public", "publicInputs"]),
-    "PreparedProverTx public inputs"
+    "PreparedProverTx public inputs",
   );
   const outputCommitments = getOptional(publicInputs, [
     "outputCommitments",
     "output_commitments",
   ]);
-  const commitment = getOptional(publicInputs, [
-    "outputCommitment0",
-    "output_commitment0",
-  ]) ?? arrayItem(outputCommitments, 0);
+  const commitment =
+    getOptional(publicInputs, ["outputCommitment0", "output_commitment0"]) ??
+    arrayItem(outputCommitments, 0);
   if (typeof commitment !== "string" || commitment.trim() === "") {
     throw new Error(
-      "PreparedProverTx is missing the first output commitment; checked prepared.outputCommitments[0], prepared.output_commitments[0], outputCommitment0, and output_commitment0."
+      "PreparedProverTx is missing the first output commitment; checked prepared.outputCommitments[0], prepared.output_commitments[0], outputCommitment0, and output_commitment0.",
     );
   }
   return commitment;
@@ -177,10 +224,13 @@ export function decodeSignatureBytes(input: string): number[] {
   if (trimmed === "") {
     throw new Error("Signature is required");
   }
-  if (/^(0x)?[0-9a-fA-F]+$/.test(trimmed) && trimmed.replace(/^0x/, "").length % 2 === 0) {
+  if (
+    /^(0x)?[0-9a-fA-F]+$/.test(trimmed) &&
+    trimmed.replace(/^0x/, "").length % 2 === 0
+  ) {
     const hex = trimmed.replace(/^0x/, "");
     return Array.from({ length: hex.length / 2 }, (_, index) =>
-      Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16)
+      Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16),
     );
   }
   const binary = globalThis.atob(trimmed);
@@ -210,6 +260,114 @@ export function normalizeWithdrawRecipient(input: string): string {
   return trimmed;
 }
 
+export function estimateStellarWithdrawFee(input: {
+  stepCount?: number;
+  resourceFeeStroopsPerStep?: string;
+  source?: StellarWithdrawFeeSource;
+}): StellarWithdrawFeeEstimate {
+  const stepCount = normalizeStepCount(input.stepCount);
+  const resourceFeePerStep = BigInt(
+    readPositiveIntegerEnv(
+      input.resourceFeeStroopsPerStep,
+      DEFAULT_WITHDRAW_RESOURCE_FEE_ESTIMATE_STROOPS,
+    ),
+  );
+  const steps = BigInt(stepCount);
+  const inclusionFeeStroops = STELLAR_BASE_FEE_STROOPS * steps;
+  const resourceFeeStroops = resourceFeePerStep * steps;
+  const totalFeeStroops = inclusionFeeStroops + resourceFeeStroops;
+  const source = input.source ?? "base-estimate";
+
+  return {
+    asset: "XLM",
+    source,
+    stepCount,
+    inclusionFeeStroops: inclusionFeeStroops.toString(),
+    resourceFeeStroops: resourceFeeStroops.toString(),
+    totalFeeStroops: totalFeeStroops.toString(),
+    totalFeeXlm: stroopsToXlm(totalFeeStroops),
+    estimatedAt: new Date().toISOString(),
+    detail:
+      source === "runtime-plan-estimate"
+        ? "Plan-aware estimate. Exact resource fee is finalized by Stellar RPC simulation inside the private prover runtime before signing."
+        : "Conservative fallback estimate. Connect the note owner wallet for a plan-aware estimate.",
+  };
+}
+
+export function stroopsToXlm(value: bigint | string): string {
+  const stroops = typeof value === "bigint" ? value : BigInt(value);
+  const whole = stroops / STROOPS_PER_XLM;
+  const fraction = (stroops % STROOPS_PER_XLM).toString().padStart(7, "0");
+  const trimmedFraction = fraction.replace(/0+$/, "");
+  return trimmedFraction ? `${whole}.${trimmedFraction}` : whole.toString();
+}
+
+export function normalizeStepCount(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    return 1;
+  }
+  return Math.min(value, 100);
+}
+
+export function findSpendablePrivateNote(
+  notes: unknown,
+  target: PrivateNoteRecoveryTarget,
+): PrivateNoteRecoveryMatch {
+  if (!Array.isArray(notes)) {
+    return { spendable: false, count: 0, recognized: false };
+  }
+
+  const expectedCommitment = normalizeHex(target.noteCommitment);
+  const expectedPool = target.poolId;
+  const expectedAmount = target.amount;
+  let recognized = false;
+  let count = 0;
+
+  for (const note of notes) {
+    if (!note || typeof note !== "object" || Array.isArray(note)) {
+      continue;
+    }
+    const candidate = note as Record<string, unknown>;
+    const spent = candidate.spent === true;
+    if (!spent) {
+      count += 1;
+    }
+    const commitment = readString(candidate, [
+      "id",
+      "commitment",
+      "noteCommitment",
+      "note_commitment",
+    ]);
+    if (!commitment) {
+      continue;
+    }
+    recognized = true;
+    const pool = readString(candidate, [
+      "poolContractId",
+      "pool_contract_id",
+      "poolId",
+      "pool_id",
+    ]);
+    const amount = readString(candidate, ["amount", "value"]);
+
+    if (
+      !spent &&
+      normalizeHex(commitment) === expectedCommitment &&
+      (!pool || !expectedPool || pool === expectedPool) &&
+      (!amount || !expectedAmount || amount === expectedAmount)
+    ) {
+      return {
+        spendable: true,
+        count,
+        recognized,
+        matchedNote: candidate,
+      };
+    }
+  }
+
+  return { spendable: false, count, recognized };
+}
+
 function asset(name: PrivateProverAssetName, path: string) {
   return { name, path };
 }
@@ -223,6 +381,17 @@ function readRequiredPublicEnv(value: string | undefined): string {
   return trimmed && trimmed !== "TBD" ? trimmed : "";
 }
 
+function readPositiveIntegerEnv(
+  value: string | undefined,
+  fallback: string,
+): string {
+  const trimmed = value?.trim() ?? "";
+  if (/^[1-9][0-9]*$/.test(trimmed)) {
+    return trimmed;
+  }
+  return fallback;
+}
+
 function asRecord(value: unknown, name: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${name} must be an object`);
@@ -232,7 +401,7 @@ function asRecord(value: unknown, name: string): Record<string, unknown> {
 
 function getFirst(
   record: Record<string, unknown>,
-  keys: readonly string[]
+  keys: readonly string[],
 ): unknown {
   const value = getOptional(record, keys);
   if (value === undefined) {
@@ -243,7 +412,7 @@ function getFirst(
 
 function getOptional(
   record: Record<string, unknown>,
-  keys: readonly string[]
+  keys: readonly string[],
 ): unknown {
   for (const key of keys) {
     if (record[key] !== undefined) {
@@ -255,4 +424,24 @@ function getOptional(
 
 function arrayItem(value: unknown, index: number): unknown {
   return Array.isArray(value) ? value[index] : undefined;
+}
+
+function readString(
+  record: Record<string, unknown>,
+  keys: string[],
+): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim() !== "") {
+      return value;
+    }
+    if (typeof value === "number" || typeof value === "bigint") {
+      return String(value);
+    }
+  }
+  return null;
+}
+
+function normalizeHex(value: string): string {
+  return value.toLowerCase().replace(/^0x/, "");
 }
