@@ -31,6 +31,10 @@ if ! grep -q "prepareDeposit" "$SRC_DIR/js/web.js"; then
   fail "upstream web.js does not expose prepareDeposit; apply patches/stellar-private-payments/browser-prepare-only.patch before building the upstream browser bundle"
 fi
 
+if ! grep -q "executeWithdraw" "$SRC_DIR/js/web.js"; then
+  fail "upstream web.js does not expose executeWithdraw; rebuild or update the private-payments browser bundle before staging"
+fi
+
 mkdir -p "$DEST_DIR/js" "$DEST_DIR/circuits"
 cp "$SRC_DIR/js/wasm-facade.js" "$DEST_DIR/js/wasm-facade.js"
 cp "$SRC_DIR/js/web.js" "$DEST_DIR/js/web.js"

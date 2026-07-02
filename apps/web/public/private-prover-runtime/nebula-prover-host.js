@@ -43,6 +43,9 @@ async function handleRequest(message, event) {
       case "prepareDeposit":
         result = await prepareDeposit(id, payload);
         break;
+      case "executeWithdraw":
+        result = await executeWithdraw(id, payload);
+        break;
       default:
         throw new Error(`Unknown private prover command: ${command}`);
     }
@@ -92,6 +95,7 @@ async function initialize(payload) {
   const client = clientOrThrow();
   const methods = {
     prepareDeposit: typeof client.prepareDeposit === "function",
+    executeWithdraw: typeof client.executeWithdraw === "function",
     deriveAndSaveUserKeys: typeof client.deriveAndSaveUserKeys === "function",
     getUserKeys: typeof client.getUserKeys === "function",
     getASPSecret: typeof client.getASPSecret === "function",
@@ -164,6 +168,62 @@ async function prepareDeposit(requestId, payload) {
     amount,
     poolId,
     generatedAt: new Date().toISOString(),
+  };
+}
+
+async function executeWithdraw(requestId, payload) {
+  const client = clientOrThrow();
+  if (typeof client.executeWithdraw !== "function") {
+    throw new Error(
+      "Hosted Stellar Private Payments WASM is missing executeWithdraw. Stage a runtime build that exposes withdraw support before enabling private pool withdrawals."
+    );
+  }
+
+  const poolId = requireString(payload?.poolId, "poolId");
+  const address = requireString(payload?.address, "address");
+  const withdrawRecipient = requireString(
+    payload?.withdrawRecipient,
+    "withdrawRecipient"
+  );
+  const amount = requireString(payload?.amount, "amount");
+  const networkPassphrase = requireString(
+    payload?.networkPassphrase,
+    "networkPassphrase"
+  );
+
+  const result = await client.executeWithdraw(
+    poolId,
+    address,
+    withdrawRecipient,
+    BigInt(amount),
+    networkPassphrase,
+    (progress) => {
+      window.parent.postMessage(
+        {
+          type: PROGRESS_TYPE,
+          id: requestId,
+          progress: toPlain(progress),
+        },
+        window.location.origin
+      );
+    }
+  );
+
+  const plain = toPlain(result);
+  return {
+    poolId,
+    ownerAddress: address,
+    withdrawRecipient,
+    amount,
+    status: findStringValue(plain, ["status", "resultStatus"]),
+    txHash: findStringValue(plain, [
+      "hash",
+      "txHash",
+      "transactionHash",
+      "transaction_hash",
+    ]),
+    result: plain,
+    submittedAt: new Date().toISOString(),
   };
 }
 
@@ -252,6 +312,19 @@ function setStatus(value) {
   if (statusEl) {
     statusEl.textContent = value;
   }
+}
+
+function findStringValue(value, keys) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === "string" && candidate.trim() !== "") {
+      return candidate;
+    }
+  }
+  return undefined;
 }
 
 function toPlain(value) {

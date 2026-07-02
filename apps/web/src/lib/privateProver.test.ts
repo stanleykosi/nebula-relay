@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   decodeSignatureBytes,
   extractOutputCommitment,
+  isLikelyStellarPublicKey,
+  normalizeBaseUnitAmount,
+  normalizeWithdrawRecipient,
   normalizeBaseUrl,
   privateProverAssetPaths,
   type PreparedProverTx,
@@ -95,5 +98,21 @@ describe("private prover helpers", () => {
   it("decodes Freighter base64 and manual hex signatures", () => {
     expect(decodeSignatureBytes("AQID")).toEqual([1, 2, 3]);
     expect(decodeSignatureBytes("0x010203")).toEqual([1, 2, 3]);
+  });
+
+  it("validates private pool withdrawal amounts", () => {
+    expect(normalizeBaseUnitAmount(" 10000000 ")).toBe("10000000");
+    expect(() => normalizeBaseUnitAmount("0")).toThrow("greater than zero");
+    expect(() => normalizeBaseUnitAmount("1.5")).toThrow("integer");
+  });
+
+  it("validates Stellar public-key withdrawal recipients", () => {
+    const recipient = `G${"A".repeat(55)}`;
+    expect(isLikelyStellarPublicKey(recipient)).toBe(true);
+    expect(normalizeWithdrawRecipient(` ${recipient} `)).toBe(recipient);
+    expect(isLikelyStellarPublicKey(`C${"A".repeat(55)}`)).toBe(false);
+    expect(() => normalizeWithdrawRecipient("not-a-stellar-key")).toThrow(
+      "Stellar public key"
+    );
   });
 });

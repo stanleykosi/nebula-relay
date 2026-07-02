@@ -86,6 +86,7 @@ jobs:
           mkdir -p "$DIST_DIR/js"
           cp app/js/wasm-facade.js "$DIST_DIR/js/wasm-facade.js"
           grep -q "prepareDeposit" "$DIST_DIR/js/web.js"
+          grep -q "executeWithdraw" "$DIST_DIR/js/web.js"
 
       - name: Stage Nebula private prover runtime
         env:
@@ -107,6 +108,7 @@ jobs:
           test -f apps/web/public/private-prover-runtime/circuits/policy_tx_2_2.r1cs
           test -f apps/web/public/private-prover-runtime/circuits/selectiveDisclosure_1.wasm
           test -f apps/web/public/private-prover-runtime/circuits/selectiveDisclosure_1.r1cs
+          grep -q "executeWithdraw" apps/web/public/private-prover-runtime/js/web.js
           grep -a -q "CC4XGYEOY4SLBG4X7YDXGGDJ6C5GLLHPXCNILZYTE5MQGJGJHC75JDES" apps/web/public/private-prover-runtime/js/web_bg.wasm
           grep -a -q "USDC" apps/web/public/private-prover-runtime/js/web_bg.wasm
 

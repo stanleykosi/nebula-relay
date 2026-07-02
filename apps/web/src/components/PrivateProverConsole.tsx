@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowDownToLine,
   KeyRound,
   Wallet,
 } from "lucide-react";
@@ -8,10 +9,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   checkPrivateProverAssets,
   decodeSignatureBytes,
+  normalizeBaseUnitAmount,
+  normalizeWithdrawRecipient,
   privateProverConfig,
   type PrivateProverAssetStatus,
   type PrivateProverProgressEvent,
   type PrivateProverResult,
+  type PrivateProverWithdrawResult,
 } from "@/lib/privateProver";
 import {
   requestFreighterAddress,
@@ -76,6 +80,7 @@ type AspRegistrationPayload = {
 const PREPARED_JSON = "nebula-private-pool-prepared.json";
 const ASP_REQUEST_JSON = "nebula-asp-membership-request.json";
 const PREPARE_PROOF_TIMEOUT_MS = 60 * 60_000;
+const WITHDRAW_TIMEOUT_MS = 60 * 60_000;
 
 export function PrivateProverConsole() {
   const config = useMemo(() => privateProverConfig(), []);
@@ -96,12 +101,16 @@ export function PrivateProverConsole() {
   );
   const [initialized, setInitialized] = useState(false);
   const [patchedPrepareOnly, setPatchedPrepareOnly] = useState(false);
+  const [withdrawAvailable, setWithdrawAvailable] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
+  const [withdrawRecipient, setWithdrawRecipient] = useState("");
   const [amount, setAmount] = useState("10000000");
   const [derivedKeys, setDerivedKeys] = useState<DerivedKeys>();
   const [aspRegistration, setAspRegistration] =
     useState<AspRegistrationPayload>();
   const [preparedResult, setPreparedResult] = useState<PrivateProverResult>();
+  const [withdrawResult, setWithdrawResult] =
+    useState<PrivateProverWithdrawResult>();
   const [progress, setProgress] = useState<PrivateProverProgressEvent[]>([]);
   const [status, setStatus] = useState("Runtime waiting");
   const [error, setError] = useState<string>();
@@ -255,6 +264,7 @@ export function PrivateProverConsole() {
       );
       setInitialized(true);
       setPatchedPrepareOnly(result.patchedPrepareOnly);
+      setWithdrawAvailable(result.methods.executeWithdraw === true);
       if (!result.patchedPrepareOnly) {
         throw new Error("Runtime loaded without prepareDeposit");
       }
@@ -296,6 +306,7 @@ export function PrivateProverConsole() {
     run("Connecting Stellar wallet", async () => {
       const address = await requestFreighterAddress();
       setWalletAddress(address);
+      setWithdrawRecipient((current) => current || address);
       setStatus("Stellar wallet connected");
     });
 
@@ -379,6 +390,42 @@ export function PrivateProverConsole() {
     return result;
   };
 
+  const withdrawFromRuntime = async () =>
+    run("Withdrawing from private pool", async () => {
+      if (!walletAddress) {
+        throw new Error("Connect the Stellar wallet that owns the private note first");
+      }
+      if (!config.poolId) {
+        throw new Error("NEXT_PUBLIC_PRIVATE_PAYMENTS_POOL_ID is required");
+      }
+      if (!withdrawAvailable) {
+        throw new Error("The private prover runtime does not expose withdrawals");
+      }
+
+      const normalizedAmount = normalizeBaseUnitAmount(amount);
+      const normalizedRecipient = normalizeWithdrawRecipient(
+        withdrawRecipient || walletAddress
+      );
+
+      const result = await sendRuntime<PrivateProverWithdrawResult>(
+        "executeWithdraw",
+        {
+          poolId: config.poolId,
+          address: walletAddress,
+          withdrawRecipient: normalizedRecipient,
+          amount: normalizedAmount,
+          networkPassphrase: config.networkPassphrase,
+        },
+        { timeoutMs: WITHDRAW_TIMEOUT_MS }
+      );
+      setWithdrawResult(result);
+      window.localStorage.setItem(
+        "nebula.privateProver.latestWithdraw",
+        JSON.stringify(result)
+      );
+      setStatus("Private pool withdrawal submitted");
+    });
+
   const downloadJson = (filename: string, value: unknown) => {
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(value, null, 2)], {
@@ -429,6 +476,9 @@ export function PrivateProverConsole() {
         <Badge tone={patchedPrepareOnly ? "ok" : "warn"}>
           Prepare-only: {patchedPrepareOnly ? "patched" : "unverified"}
         </Badge>
+        <Badge tone={withdrawAvailable ? "ok" : "warn"}>
+          Withdraw: {withdrawAvailable ? "ready" : "unavailable"}
+        </Badge>
       </div>
 
       <div className="grid">
@@ -473,7 +523,10 @@ export function PrivateProverConsole() {
             <input
               className="input"
               value={walletAddress}
-              onChange={(event) => setWalletAddress(event.target.value)}
+              onChange={(event) => {
+                setWalletAddress(event.target.value);
+                setWithdrawRecipient((current) => current || event.target.value);
+              }}
               spellCheck={false}
             />
           </label>
@@ -517,7 +570,45 @@ export function PrivateProverConsole() {
           />
         </Panel>
 
-        <Panel title="4. Status" className="span-5">
+        <Panel title="4. Withdraw from pool" className="span-5">
+          <p>
+            Spend an owned private note from the pool into the connected Stellar
+            wallet, or send it to another Stellar wallet.
+          </p>
+          <label className="field">
+            <span>Withdraw recipient</span>
+            <input
+              className="input"
+              value={withdrawRecipient}
+              onChange={(event) => setWithdrawRecipient(event.target.value)}
+              placeholder={walletAddress || "G..."}
+              spellCheck={false}
+            />
+          </label>
+          <div className="actions">
+            <ActionButton
+              onClick={() => setWithdrawRecipient(walletAddress)}
+              disabled={!walletAddress}
+            >
+              <Wallet size={16} /> Use connected wallet
+            </ActionButton>
+            <ActionButton
+              onClick={() => void withdrawFromRuntime()}
+              disabled={!initialized || !walletAddress || !withdrawAvailable}
+              variant="primary"
+            >
+              <ArrowDownToLine size={16} /> Withdraw to Stellar
+            </ActionButton>
+          </div>
+          <HashRow label="Withdraw tx" value={withdrawResult?.txHash} />
+          <HashRow label="Withdraw status" value={withdrawResult?.status} />
+          <HashRow
+            label="Withdraw recipient"
+            value={withdrawResult?.withdrawRecipient}
+          />
+        </Panel>
+
+        <Panel title="5. Status" className="span-12">
           <p>{status}</p>
           {error ? <p className="callout danger">{error}</p> : null}
           {progress.length ? (

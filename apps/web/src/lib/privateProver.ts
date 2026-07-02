@@ -63,6 +63,17 @@ export interface PrivateProverResult {
   generatedAt: string;
 }
 
+export interface PrivateProverWithdrawResult {
+  poolId: string;
+  ownerAddress: string;
+  withdrawRecipient: string;
+  amount: string;
+  status?: string;
+  txHash?: string;
+  result: unknown;
+  submittedAt: string;
+}
+
 export interface PrivateProverProgressEvent {
   flow?: string;
   stage?: string;
@@ -174,6 +185,29 @@ export function decodeSignatureBytes(input: string): number[] {
   }
   const binary = globalThis.atob(trimmed);
   return Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+export function normalizeBaseUnitAmount(input: string): string {
+  const trimmed = input.trim();
+  if (!/^(0|[1-9][0-9]*)$/.test(trimmed)) {
+    throw new Error("Amount must be an integer number of base units");
+  }
+  if (BigInt(trimmed) <= BigInt(0)) {
+    throw new Error("Amount must be greater than zero");
+  }
+  return trimmed;
+}
+
+export function isLikelyStellarPublicKey(input: string): boolean {
+  return /^G[A-Z2-7]{55}$/.test(input.trim());
+}
+
+export function normalizeWithdrawRecipient(input: string): string {
+  const trimmed = input.trim();
+  if (!isLikelyStellarPublicKey(trimmed)) {
+    throw new Error("Withdraw recipient must be a Stellar public key");
+  }
+  return trimmed;
 }
 
 function asset(name: PrivateProverAssetName, path: string) {
